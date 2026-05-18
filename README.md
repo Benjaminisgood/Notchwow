@@ -1,6 +1,15 @@
 # NotchNotes
 
+![NotchNotes preview](docs/assets/readme-hero.png)
+
 NotchNotes is a small native macOS note app that lives at the top edge of your MacBook screen. Move the cursor to the notch area and it unfolds into a dark Markdown notebook for quick tasks, links, screenshots, and tiny reminders.
+
+## Download
+
+- [Download the latest release](https://github.com/oil-oil/NotchNotes/releases/latest)
+- [Open the homepage](https://oil-oil.github.io/NotchNotes/)
+
+After downloading, unzip the app, move it to Applications, then right-click and choose Open on the first launch.
 
 ## Stack
 
