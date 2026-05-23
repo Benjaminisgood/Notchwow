@@ -45,6 +45,33 @@ extension NativeTextView {
         pasteAsPlainText(sender)
     }
 
+    override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        guard canAcceptAttachmentDrop(sender.draggingPasteboard) else {
+            return super.draggingEntered(sender)
+        }
+
+        return .copy
+    }
+
+    override func prepareForDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        canAcceptAttachmentDrop(sender.draggingPasteboard) || super.prepareForDragOperation(sender)
+    }
+
+    override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        guard canAcceptAttachmentDrop(sender.draggingPasteboard),
+              let embed = onPasteImage?(sender.draggingPasteboard),
+              !embed.isEmpty else {
+            return super.performDragOperation(sender)
+        }
+
+        let location = convert(sender.draggingLocation, from: nil)
+        let insertionIndex = characterIndexForInsertion(at: location)
+        let clampedLocation = min(max(insertionIndex, 0), (string as NSString).length)
+        setSelectedRange(NSRange(location: clampedLocation, length: 0))
+        insertBlockEmbed(embed)
+        return true
+    }
+
     private func insertBlockEmbed(_ embed: String) {
         let sel = selectedRange()
         let nsText = string as NSString
@@ -70,6 +97,17 @@ extension NativeTextView {
             if let s = try? String(contentsOf: url) { return s }
         }
         return nil
+    }
+
+    private func canAcceptAttachmentDrop(_ pasteboard: NSPasteboard) -> Bool {
+        guard isEditable else { return false }
+        if PasteboardImageReader.canPasteImage(from: pasteboard) { return true }
+
+        let options: [NSPasteboard.ReadingOptionKey: Any] = [
+            .urlReadingFileURLsOnly: true
+        ]
+        let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: options) as? [URL] ?? []
+        return urls.contains { $0.isFileURL }
     }
 
     private func sanitizePastedText(_ s: String) -> String {

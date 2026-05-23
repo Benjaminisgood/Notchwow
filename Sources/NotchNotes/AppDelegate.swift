@@ -6,6 +6,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
         panelController = NotchPanelController()
         panelController?.showDocked()
         buildStatusItem()
@@ -14,42 +16,111 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func buildStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        item.button?.image = NSImage(systemSymbolName: "note.text", accessibilityDescription: "NotchNotes")
+        item.button?.image = NSImage(systemSymbolName: "note.text", accessibilityDescription: "notchwow")
         item.button?.imagePosition = .imageOnly
-        item.menu = makeAppMenu()
+        item.menu = makeStatusMenu()
         statusItem = item
     }
 
     private func buildMenu() {
-        let rootItem = NSMenuItem()
+        let rootItem = NSMenuItem(title: "notchwow", action: nil, keyEquivalent: "")
         rootItem.submenu = makeAppMenu()
 
-        let editItem = NSMenuItem()
+        let workbenchItem = NSMenuItem(title: "Workbench", action: nil, keyEquivalent: "")
+        workbenchItem.submenu = makeWorkbenchMenu()
+
+        let editItem = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
         editItem.submenu = makeEditMenu()
 
         let mainMenu = NSMenu()
         mainMenu.addItem(rootItem)
+        mainMenu.addItem(workbenchItem)
         mainMenu.addItem(editItem)
         NSApp.mainMenu = mainMenu
     }
 
     private func makeAppMenu() -> NSMenu {
         let appMenu = NSMenu()
-        let showItem = NSMenuItem(title: "Show Notes", action: #selector(showNotes), keyEquivalent: "n")
-        showItem.target = self
-        appMenu.addItem(showItem)
+        appMenu.addItem(menuItem(title: "Show notchwow", action: #selector(showNotes), keyEquivalent: "0"))
 
-        let hideItem = NSMenuItem(title: "Hide Notes", action: #selector(hideNotes), keyEquivalent: "w")
-        hideItem.target = self
-        appMenu.addItem(hideItem)
+        appMenu.addItem(menuItem(title: "Hide notchwow", action: #selector(hideNotes), keyEquivalent: "w"))
 
         appMenu.addItem(.separator())
 
-        let quitItem = NSMenuItem(title: "Quit NotchNotes", action: #selector(quit), keyEquivalent: "q")
-        quitItem.target = self
-        appMenu.addItem(quitItem)
+        appMenu.addItem(menuItem(title: "Quit notchwow", action: #selector(quit), keyEquivalent: "q"))
 
         return appMenu
+    }
+
+    private func makeStatusMenu() -> NSMenu {
+        let menu = makeAppMenu()
+        menu.addItem(.separator())
+        addWorkbenchItems(to: menu)
+        return menu
+    }
+
+    private func makeWorkbenchMenu() -> NSMenu {
+        let menu = NSMenu(title: "Workbench")
+        addWorkbenchItems(to: menu)
+        return menu
+    }
+
+    private func addWorkbenchItems(to menu: NSMenu) {
+        menu.addItem(menuItem(title: "Show Markdown", action: #selector(showMarkdown), keyEquivalent: "1"))
+        menu.addItem(menuItem(title: "Show Shell", action: #selector(showShell), keyEquivalent: "2"))
+        menu.addItem(menuItem(title: "Show Python", action: #selector(showPython), keyEquivalent: "3"))
+        menu.addItem(menuItem(title: "Show Terminal Tasks", action: #selector(showTerminalTasks), keyEquivalent: "4"))
+
+        menu.addItem(.separator())
+
+        menu.addItem(menuItem(title: "New Markdown Note", action: #selector(newMarkdownNote), keyEquivalent: "n"))
+        menu.addItem(
+            menuItem(
+                title: "New Python File",
+                action: #selector(newPythonFile),
+                keyEquivalent: "n",
+                modifiers: [.command, .option]
+            )
+        )
+
+        menu.addItem(.separator())
+
+        menu.addItem(menuItem(title: "Run Shell Command", action: #selector(runShellCommand), keyEquivalent: "\r"))
+        menu.addItem(
+            menuItem(
+                title: "Run Python File",
+                action: #selector(runPythonFile),
+                keyEquivalent: "\r",
+                modifiers: [.command, .shift]
+            )
+        )
+        menu.addItem(
+            menuItem(
+                title: "Run Python Command",
+                action: #selector(runPythonCommand),
+                keyEquivalent: "\r",
+                modifiers: [.command, .option]
+            )
+        )
+
+        menu.addItem(.separator())
+
+        menu.addItem(
+            menuItem(
+                title: "New Terminal Window",
+                action: #selector(openNewTerminalWindow),
+                keyEquivalent: "t",
+                modifiers: [.command, .option]
+            )
+        )
+        menu.addItem(
+            menuItem(
+                title: "Refresh Terminal Tasks",
+                action: #selector(refreshTerminalTasks),
+                keyEquivalent: "r",
+                modifiers: [.command, .option]
+            )
+        )
     }
 
     private func makeEditMenu() -> NSMenu {
@@ -87,12 +158,68 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return editMenu
     }
 
+    private func menuItem(
+        title: String,
+        action: Selector,
+        keyEquivalent: String,
+        modifiers: NSEvent.ModifierFlags = [.command]
+    ) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: keyEquivalent)
+        item.target = self
+        item.keyEquivalentModifierMask = modifiers
+        return item
+    }
+
     @objc private func showNotes() {
         panelController?.expand(animated: true)
     }
 
     @objc private func hideNotes() {
         panelController?.collapse(animated: true)
+    }
+
+    @objc private func showMarkdown() {
+        panelController?.showWorkbenchMode(.markdown)
+    }
+
+    @objc private func showShell() {
+        panelController?.showWorkbenchMode(.terminal)
+    }
+
+    @objc private func showPython() {
+        panelController?.showWorkbenchMode(.python)
+    }
+
+    @objc private func showTerminalTasks() {
+        panelController?.showWorkbenchMode(.tasks)
+    }
+
+    @objc private func newMarkdownNote() {
+        panelController?.newMarkdownNote()
+    }
+
+    @objc private func newPythonFile() {
+        panelController?.newPythonFile()
+    }
+
+    @objc private func runShellCommand() {
+        panelController?.runShellCommand()
+    }
+
+    @objc private func runPythonFile() {
+        panelController?.runPythonFile()
+    }
+
+    @objc private func runPythonCommand() {
+        panelController?.runPythonCommand()
+    }
+
+    @objc private func openNewTerminalWindow() {
+        panelController?.openNewTerminalWindow()
+    }
+
+    @objc private func refreshTerminalTasks() {
+        panelController?.refreshTerminalTasks()
     }
 
     @objc private func quit() {

@@ -10,14 +10,16 @@ final class SettingsPopoverPanel: NSPanel {
 @MainActor
 final class SettingsPopoverController: NSObject, NSWindowDelegate {
     private let settingsStore: AppSettingsStore
+    private let condaStore: CondaEnvironmentStore
     private var panel: SettingsPopoverPanel?
     private var localOutsideClickMonitor: Any?
     private var globalOutsideClickMonitor: Any?
     private var suppressShowUntil: Date?
-    private let contentSize = NSSize(width: 238, height: 126)
+    private let contentSize = NSSize(width: 320, height: 226)
 
-    init(settingsStore: AppSettingsStore) {
+    init(settingsStore: AppSettingsStore, condaStore: CondaEnvironmentStore) {
         self.settingsStore = settingsStore
+        self.condaStore = condaStore
         super.init()
     }
 
@@ -50,7 +52,7 @@ final class SettingsPopoverController: NSObject, NSWindowDelegate {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         panel.delegate = self
 
-        let view = SettingsPopoverView(settingsStore: settingsStore)
+        let view = SettingsPopoverView(settingsStore: settingsStore, condaStore: condaStore)
         let host = FirstMouseHostingView(rootView: view)
         host.frame = NSRect(origin: .zero, size: contentSize)
         host.wantsLayer = true
@@ -184,10 +186,11 @@ final class SettingsPopoverController: NSObject, NSWindowDelegate {
 
 struct SettingsPopoverView: View {
     @ObservedObject var settingsStore: AppSettingsStore
+    @ObservedObject var condaStore: CondaEnvironmentStore
     @State private var appeared = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 8) {
                 Image(systemName: "gearshape")
                     .font(.system(size: 12, weight: .semibold))
@@ -221,9 +224,47 @@ struct SettingsPopoverView: View {
                     }
                 }
             }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Python")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.50))
+
+                HStack(spacing: 8) {
+                    EnvironmentPicker(condaStore: condaStore)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Button {
+                        condaStore.refresh()
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .frame(width: 28, height: 26)
+                    }
+                    .buttonStyle(MarkdownToolbarButtonStyle())
+                    .disabled(condaStore.isRefreshing)
+                    .help("Refresh conda environments")
+
+                    Button {
+                        if let url = condaStore.selectedEnvironment?.url {
+                            NSWorkspace.shared.open(url)
+                        }
+                    } label: {
+                        Image(systemName: "folder")
+                            .frame(width: 28, height: 26)
+                    }
+                    .buttonStyle(MarkdownToolbarButtonStyle())
+                    .disabled(condaStore.selectedEnvironment == nil)
+                    .help("Open environment folder")
+                }
+
+                Text(condaStore.selectedEnvironment?.path ?? condaStore.condaExecutablePath)
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.42))
+                    .lineLimit(1)
+            }
         }
         .padding(14)
-        .frame(width: 238, height: 126)
+        .frame(width: 320, height: 226)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(Color(red: 0.045, green: 0.045, blue: 0.052).opacity(0.98))

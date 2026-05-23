@@ -3,12 +3,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "NotchNotes",
+    name: "notchwow",
     platforms: [
         .macOS(.v14)
     ],
     products: [
-        .executable(name: "NotchNotes", targets: ["NotchNotes"])
+        .executable(name: "notchwow", targets: ["NotchNotes"])
     ],
     dependencies: [
         .package(path: "Vendor/swift-markdown-engine")
@@ -17,7 +17,8 @@ let package = Package(
         .executableTarget(
             name: "NotchNotes",
             dependencies: [
-                .product(name: "MarkdownEngine", package: "swift-markdown-engine")
+                .product(name: "MarkdownEngine", package: "swift-markdown-engine"),
+                .product(name: "MarkdownEngineLatex", package: "swift-markdown-engine")
             ],
             path: "Sources/NotchNotes"
         )

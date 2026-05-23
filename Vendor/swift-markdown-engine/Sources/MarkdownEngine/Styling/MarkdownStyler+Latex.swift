@@ -46,7 +46,7 @@ extension MarkdownStyler {
                     paragraphSpacingBefore: ctx.configuration.blockLatex.paragraphSpacingBefore,
                     paragraphSpacing: ctx.configuration.blockLatex.paragraphSpacing,
                     alignment: .center,
-                    mode: .collapsedSource(markerTexts: ["$$", "$$"]),
+                    mode: .collapsedSource(markerTexts: token.markerRanges.map { ctx.nsText.substring(with: $0) }),
                     ctx: ctx,
                     attrs: &attrs
                 )
@@ -78,8 +78,14 @@ extension MarkdownStyler {
                 if let entry = ctx.services.latex.render(latex: latexContent, fontSize: latexFontSize, theme: ctx.configuration.theme) {
                     let imageBounds = CGRect(x: 0, y: entry.baselineOffset, width: entry.size.width, height: entry.size.height)
                     let contentLength = token.contentRange.length
-                    let tinyDollarWidth = HeadingHelpers.textWidth("$", font: ctx.latexMarkerFont)
-                    let baseDollarWidth = HeadingHelpers.textWidth("$", font: ctx.baseFont)
+                    let openMarkerText = token.markerRanges.indices.contains(0)
+                        ? ctx.nsText.substring(with: token.markerRanges[0])
+                        : "$"
+                    let closeMarkerText = token.markerRanges.indices.contains(1)
+                        ? ctx.nsText.substring(with: token.markerRanges[1])
+                        : "$"
+                    let tinyOpenMarkerWidth = HeadingHelpers.textWidth(openMarkerText, font: ctx.latexMarkerFont)
+                    let baseCloseMarkerWidth = HeadingHelpers.textWidth(closeMarkerText, font: ctx.baseFont)
 
                     if contentLength > 0 {
                         let firstCharRange = NSRange(location: token.contentRange.location, length: 1)
@@ -107,12 +113,12 @@ extension MarkdownStyler {
                     attrs.append((openMarker, [
                         .font: ctx.latexMarkerFont,
                         .foregroundColor: NSColor.clear,
-                        .kern: -tinyDollarWidth
+                        .kern: -tinyOpenMarkerWidth
                     ]))
                     let closeMarker = token.markerRanges[1]
                     attrs.append((closeMarker, [
                         .foregroundColor: NSColor.clear,
-                        .kern: -baseDollarWidth
+                        .kern: -baseCloseMarkerWidth
                     ]))
                 } else {
                     for markerRange in token.markerRanges {

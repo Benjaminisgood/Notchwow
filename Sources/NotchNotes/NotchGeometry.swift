@@ -58,8 +58,8 @@ enum NotchGeometry {
 
         let compactWidth = min(max(notch.width - 6, 182), 238)
         let compactHeight = min(max(notch.height + 2, 32), 38)
-        let expandedWidth = min(max(notch.width + 220, 480), 540, screenFrame.width - 36)
-        let expandedHeight = min(max(notch.height + 374, 408), screenFrame.height - 84)
+        let expandedWidth = min(max(notch.width + 820, 920), screenFrame.width - 72)
+        let expandedHeight = min(max(notch.height + 620, 680), screenFrame.height - 112)
 
         return NotchLayout(
             notchSize: notch,

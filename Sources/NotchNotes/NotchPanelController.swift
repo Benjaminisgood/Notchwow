@@ -4,6 +4,7 @@ import SwiftUI
 @MainActor
 final class NotchPanel: NSPanel {
     var onMouseEvent: ((NSEvent) -> Void)?
+    var onScrollEvent: ((NSEvent) -> Void)?
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
@@ -11,6 +12,10 @@ final class NotchPanel: NSPanel {
     override func sendEvent(_ event: NSEvent) {
         if event.type == .leftMouseDown || event.type == .leftMouseDragged || event.type == .leftMouseUp {
             onMouseEvent?(event)
+        }
+
+        if event.type == .scrollWheel {
+            onScrollEvent?(event)
         }
 
         super.sendEvent(event)
@@ -31,7 +36,36 @@ final class NotchPanelController: NSObject {
     private let imageStore = LocalImageStore()
     private let drawerState = DrawerState()
     private let editorInteractionState = EditorInteractionState()
-    private lazy var settingsPopoverController = SettingsPopoverController(settingsStore: settingsStore)
+    private let workbenchState = WorkbenchState()
+    private let shellCommandStore = ShellCommandStore()
+    private let terminalTaskStore = TerminalTaskStore()
+    private let condaStore = CondaEnvironmentStore()
+    private let pythonStore = CodeFileStore(
+        rootURL: WorkspacePaths.pythonRoot,
+        fileExtension: "py",
+        defaultTemplate: """
+        # New script
+
+        print("Hello from notchwow")
+        """
+    )
+    private let terminalRunner = CommandRunner(
+        workingDirectory: WorkspacePaths.shellRoot,
+        input: "pwd",
+        shellBootstrapURL: WorkspacePaths.benshellInitScript,
+        environment: ["BENSHELL_HOME": WorkspacePaths.benshellRoot.path],
+        inputPersistenceURL: WorkspacePaths.shellInputFile,
+        outputPersistenceURL: WorkspacePaths.shellOutputFile
+    )
+    private let pythonRunner = CommandRunner(
+        workingDirectory: WorkspacePaths.pythonRoot,
+        shellBootstrapURL: WorkspacePaths.benshellInitScript,
+        environment: ["BENSHELL_HOME": WorkspacePaths.benshellRoot.path]
+    )
+    private lazy var settingsPopoverController = SettingsPopoverController(
+        settingsStore: settingsStore,
+        condaStore: condaStore
+    )
     private let hotPanel: NotchPanel
     private let drawerPanel: NotchPanel
     private var hostingView: NSHostingView<NotebookView>?
@@ -43,6 +77,7 @@ final class NotchPanelController: NSObject {
     private var isExpanded = false
     private var activeMenuTrackingCount = 0
     private var collapseTask: DispatchWorkItem?
+    private var lastHorizontalSwipeAt = Date.distantPast
 
     override init() {
         hotPanel = NotchPanel(
@@ -123,6 +158,61 @@ final class NotchPanelController: NSObject {
         }
     }
 
+    func showWorkbenchMode(_ mode: WorkbenchMode) {
+        cancelCollapse()
+        workbenchState.select(mode)
+        expand(animated: true)
+    }
+
+    func newMarkdownNote() {
+        store.addTab()
+        showWorkbenchMode(.markdown)
+    }
+
+    func newPythonFile() {
+        pythonStore.addFile()
+        showWorkbenchMode(.python)
+    }
+
+    func runShellCommand() {
+        showWorkbenchMode(.terminal)
+        terminalRunner.run()
+    }
+
+    func runPythonFile() {
+        showWorkbenchMode(.python)
+        let filePath = pythonStore.activeFile.filePath
+        pythonRunner.run(
+            condaStore.runPythonFileCommand(filePath: filePath),
+            displayCommand: condaStore.runPythonFileDisplayCommand(filePath: filePath),
+            displayPrompt: "py file>",
+            showsSuccessfulExit: false
+        )
+    }
+
+    func runPythonCommand() {
+        showWorkbenchMode(.python)
+        guard let runCommand = condaStore.pythonConsoleCommand(pythonRunner.input) else { return }
+
+        pythonRunner.run(
+            runCommand.command,
+            displayCommand: runCommand.displayCommand,
+            displayPrompt: runCommand.displayPrompt,
+            clearsInputOnRun: true,
+            showsSuccessfulExit: false
+        )
+    }
+
+    func openNewTerminalWindow() {
+        showWorkbenchMode(.tasks)
+        terminalTaskStore.openNewTerminalWindow()
+    }
+
+    func refreshTerminalTasks() {
+        showWorkbenchMode(.tasks)
+        terminalTaskStore.refresh()
+    }
+
     private func configurePanel(_ panel: NotchPanel) {
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -146,6 +236,13 @@ final class NotchPanelController: NSObject {
             imageStore: imageStore,
             drawerState: drawerState,
             editorInteractionState: editorInteractionState,
+            workbenchState: workbenchState,
+            pythonStore: pythonStore,
+            shellCommandStore: shellCommandStore,
+            terminalTaskStore: terminalTaskStore,
+            condaStore: condaStore,
+            terminalRunner: terminalRunner,
+            pythonRunner: pythonRunner,
             layout: layout,
             onOpenSettings: { [weak self] in self?.openSettingsPopover() }
         )
@@ -222,6 +319,10 @@ final class NotchPanelController: NSObject {
         drawerPanel.onMouseEvent = { [weak self] event in
             guard let self else { return }
             self.editorInteractionState.handleMouseEvent(event, searchingIn: self.hostingView)
+        }
+
+        drawerPanel.onScrollEvent = { [weak self] event in
+            self?.handleScrollEvent(event)
         }
     }
 
@@ -344,6 +445,26 @@ final class NotchPanelController: NSObject {
     private func openSettingsPopover() {
         cancelCollapse()
         settingsPopoverController.show(relativeTo: drawerPanel)
+    }
+
+    private func handleScrollEvent(_ event: NSEvent) {
+        guard isExpanded else { return }
+
+        let deltaX = event.scrollingDeltaX
+        let deltaY = event.scrollingDeltaY
+        guard abs(deltaX) > 18, abs(deltaX) > abs(deltaY) * 1.35 else { return }
+
+        let now = Date()
+        guard now.timeIntervalSince(lastHorizontalSwipeAt) > 0.32 else { return }
+        lastHorizontalSwipeAt = now
+
+        withAnimation(.easeOut(duration: 0.16)) {
+            if deltaX > 0 {
+                workbenchState.selectNext()
+            } else {
+                workbenchState.selectPrevious()
+            }
+        }
     }
 
     private func currentLayout() -> NotchLayout {

@@ -160,6 +160,7 @@ public struct NativeTextViewWrapper: NSViewRepresentable {
         textView.isAutomaticQuoteSubstitutionEnabled = true
         textView.isAutomaticDataDetectionEnabled = true
         textView.isAutomaticDashSubstitutionEnabled = false
+        textView.registerForDraggedTypes([.fileURL, .URL, .png, .tiff])
         textView.onPasteImage = onPasteImage
         if #available(macOS 15.1, *) {
             textView.writingToolsBehavior = .complete

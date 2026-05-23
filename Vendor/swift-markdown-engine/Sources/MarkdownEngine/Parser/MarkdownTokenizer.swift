@@ -40,8 +40,20 @@ private extension MarkdownTokenizer {
         pattern: #"(?s)(?<!\$)\$\$(.+?)\$\$"#,
         options: []
     )
+    static let displayLatexRegex = try! NSRegularExpression(
+        pattern: #"(?s)\\\[(.+?)\\\]"#,
+        options: []
+    )
     static let inlineLatexRegex = try! NSRegularExpression(
         pattern: "(?<!\\$)\\$(?!\\$)([^$\\n]+?)\\$(?!\\$)",
+        options: []
+    )
+    static let inlineParenLatexRegex = try! NSRegularExpression(
+        pattern: #"\\\(([^\r\n]+?)\\\)"#,
+        options: []
+    )
+    static let mathMLRegex = try! NSRegularExpression(
+        pattern: #"(?is)<math\b[^>]*>.*?</math>"#,
         options: []
     )
 }
@@ -140,19 +152,43 @@ enum MarkdownTokenizer {
                                         markerRanges: [openingMarker, closingMarker]))
         }
         
-        // Block LaTeX $$...$$ (multiline)
-        for match in blockLatexRegex.matches(in: text, options: [], range: fullRange) {
+        // MathML <math>...</math> blocks. Rendering is only applied when the
+        // token is a standalone paragraph, so inline HTML remains editable text.
+        for match in mathMLRegex.matches(in: text, options: [], range: fullRange) {
             let full = match.range(at: 0)
             let inCode = tokens.contains { $0.kind == .codeBlock && NSIntersectionRange($0.range, full).length > 0 }
             if inCode { continue }
-            
-            let content = match.range(at: 1)
-            let openMarker = NSRange(location: full.location, length: 2)
-            let closeMarker = NSRange(location: full.location + full.length - 2, length: 2)
-            tokens.append(MarkdownToken(kind: .blockLatex,
-                                        range: full,
-                                        contentRange: content,
-                                        markerRanges: [openMarker, closeMarker]))
+
+            let token = MarkdownToken(kind: .blockLatex,
+                                      range: full,
+                                      contentRange: full,
+                                      markerRanges: [])
+            guard token.standaloneParagraphRange(in: nsText) != nil else { continue }
+            tokens.append(token)
+        }
+
+        // Block LaTeX $$...$$ and \[...\] (multiline)
+        let blockLatexPatterns: [(regex: NSRegularExpression, markerLength: Int)] = [
+            (blockLatexRegex, 2),
+            (displayLatexRegex, 2)
+        ]
+        for pattern in blockLatexPatterns {
+            for match in pattern.regex.matches(in: text, options: [], range: fullRange) {
+                let full = match.range(at: 0)
+                let inCodeOrMathML = tokens.contains {
+                    ($0.kind == .codeBlock || ($0.kind == .blockLatex && $0.markerRanges.isEmpty)) &&
+                    NSIntersectionRange($0.range, full).length > 0
+                }
+                if inCodeOrMathML { continue }
+                
+                let content = match.range(at: 1)
+                let openMarker = NSRange(location: full.location, length: pattern.markerLength)
+                let closeMarker = NSRange(location: full.location + full.length - pattern.markerLength, length: pattern.markerLength)
+                tokens.append(MarkdownToken(kind: .blockLatex,
+                                            range: full,
+                                            contentRange: content,
+                                            markerRanges: [openMarker, closeMarker]))
+            }
         }
 
         // Inline code `code`
@@ -167,23 +203,29 @@ enum MarkdownTokenizer {
                                         markerRanges: [openBacktick, closeBacktick]))
         }
 
-        // Inline LaTeX $formula$
-        for match in inlineLatexRegex.matches(in: text, options: [], range: fullRange) {
-            let full = match.range(at: 0)
-            let content = match.range(at: 1)
-            let isInsideBlock = tokens.contains {
-                ($0.kind == .codeBlock || $0.kind == .blockLatex) &&
-                NSIntersectionRange($0.range, full).length > 0
+        // Inline LaTeX $formula$ and \(formula\)
+        let inlineLatexPatterns: [(regex: NSRegularExpression, markerLength: Int, requiresHeuristic: Bool)] = [
+            (inlineLatexRegex, 1, true),
+            (inlineParenLatexRegex, 2, false)
+        ]
+        for pattern in inlineLatexPatterns {
+            for match in pattern.regex.matches(in: text, options: [], range: fullRange) {
+                let full = match.range(at: 0)
+                let content = match.range(at: 1)
+                let isInsideBlock = tokens.contains {
+                    ($0.kind == .codeBlock || $0.kind == .blockLatex) &&
+                    NSIntersectionRange($0.range, full).length > 0
+                }
+                if isInsideBlock { continue }
+                let contentString = nsText.substring(with: content)
+                if pattern.requiresHeuristic && !isInlineMathContent(contentString) { continue }
+                let openMarker = NSRange(location: full.location, length: pattern.markerLength)
+                let closeMarker = NSRange(location: full.location + full.length - pattern.markerLength, length: pattern.markerLength)
+                tokens.append(MarkdownToken(kind: .inlineLatex,
+                                            range: full,
+                                            contentRange: content,
+                                            markerRanges: [openMarker, closeMarker]))
             }
-            if isInsideBlock { continue }
-            let contentString = nsText.substring(with: content)
-            if !isInlineMathContent(contentString) { continue }
-            let openDollar = NSRange(location: full.location, length: 1)
-            let closeDollar = NSRange(location: full.location + full.length - 1, length: 1)
-            tokens.append(MarkdownToken(kind: .inlineLatex,
-                                        range: full,
-                                        contentRange: content,
-                                        markerRanges: [openDollar, closeDollar]))
         }
 
         return tokens

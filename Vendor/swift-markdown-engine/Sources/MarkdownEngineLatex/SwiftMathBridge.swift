@@ -66,7 +66,9 @@ public final class SwiftMathBridge: LatexRenderer, @unchecked Sendable {
         fontSize: CGFloat,
         theme: MarkdownEditorTheme
     ) -> LatexRenderResult? {
-        let normalizedLatex = latex.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedLatex = Self.preprocessLatex(
+            MathMLToLatexConverter.convert(latex) ?? latex
+        )
         guard !normalizedLatex.isEmpty else { return nil }
 
         let appearance = NSApp.keyWindow?.effectiveAppearance ?? NSApp.effectiveAppearance
@@ -107,6 +109,106 @@ public final class SwiftMathBridge: LatexRenderer, @unchecked Sendable {
     }
 
     // MARK: - Private
+
+    private static func preprocessLatex(_ latex: String) -> String {
+        var output = latex.trimmingCharacters(in: .whitespacesAndNewlines)
+        output = replaceTags(in: output)
+        return output.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// SwiftMath does not implement AMS `\tag`. Preserve the visual equation
+    /// number by rendering it as spaced roman text at the end of the formula.
+    private static func replaceTags(in latex: String) -> String {
+        var output = ""
+        var index = latex.startIndex
+
+        while index < latex.endIndex {
+            let commandStart = latex.index(after: index)
+            let commandEnd = commandStart < latex.endIndex
+                ? latex[commandStart...].firstIndex(where: { !$0.isLetter }) ?? latex.endIndex
+                : latex.endIndex
+
+            guard latex[index] == "\\",
+                  latex[commandStart..<commandEnd] == "tag" else {
+                output.append(latex[index])
+                index = latex.index(after: index)
+                continue
+            }
+
+            var cursor = commandEnd
+            let isStarred = cursor < latex.endIndex && latex[cursor] == "*"
+            if isStarred {
+                cursor = latex.index(after: cursor)
+            }
+
+            while cursor < latex.endIndex && latex[cursor].isWhitespace {
+                cursor = latex.index(after: cursor)
+            }
+
+            guard cursor < latex.endIndex,
+                  latex[cursor] == "{",
+                  let closeBrace = matchingBrace(in: latex, openBrace: cursor) else {
+                output += "\\tag"
+                index = commandEnd
+                continue
+            }
+
+            let contentStart = latex.index(after: cursor)
+            let tagContent = String(latex[contentStart..<closeBrace])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let renderedTag = isStarred ? tagContent : parenthesizedTag(tagContent)
+            output += "\\qquad \\mathrm{\(escapeTextForRoman(renderedTag))}"
+            index = latex.index(after: closeBrace)
+        }
+
+        return output
+    }
+
+    private static func matchingBrace(in latex: String, openBrace: String.Index) -> String.Index? {
+        var depth = 0
+        var index = openBrace
+        var previousWasEscape = false
+
+        while index < latex.endIndex {
+            let character = latex[index]
+            if previousWasEscape {
+                previousWasEscape = false
+            } else if character == "\\" {
+                previousWasEscape = true
+            } else if character == "{" {
+                depth += 1
+            } else if character == "}" {
+                depth -= 1
+                if depth == 0 {
+                    return index
+                }
+            }
+            index = latex.index(after: index)
+        }
+
+        return nil
+    }
+
+    private static func parenthesizedTag(_ tag: String) -> String {
+        if tag.hasPrefix("("), tag.hasSuffix(")") {
+            return tag
+        }
+        return "(\(tag))"
+    }
+
+    private static func escapeTextForRoman(_ text: String) -> String {
+        text.reduce(into: "") { result, character in
+            switch character {
+            case "{", "}":
+                result.append("\\")
+                result.append(character)
+            case "\\":
+                result += "\\backslash "
+            default:
+                result.append(character)
+            }
+        }
+    }
 
     /// Fold an `NSColor` to a 24-bit fingerprint that's good enough to
     /// bust the cache when the theme changes the LaTeX text color.
