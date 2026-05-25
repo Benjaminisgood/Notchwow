@@ -3,6 +3,8 @@ import MarkdownEngine
 import MarkdownEngineLatex
 import SwiftUI
 
+private let leftPickerPopoverAnchor = UnitPoint(x: 1, y: 0.5)
+
 @MainActor
 final class DrawerState: ObservableObject {
     @Published var isExpanded = false
@@ -362,12 +364,24 @@ struct MarkdownTopToolsView: View {
                 systemImage: "doc.text"
             )
 
-            ToolbarSearchBox(
+            ToolbarSearchField(
                 placeholder: "md",
                 query: $store.searchQuery,
                 resultCount: store.filteredTabs.count,
                 isShowingResults: $isShowingSearchResults
             ) {
+                MarkdownSearchResultsPopover(
+                    tabs: Array(store.filteredTabs.prefix(32)),
+                    activeTabID: store.activeTabID
+                ) { tab in
+                    rememberCurrentSelection()
+                    store.selectTab(tab.id)
+                    store.searchQuery = ""
+                    isShowingSearchResults = false
+                }
+            }
+
+            TopToolbarButtonStrip {
                 Button {
                     store.syncFromDisk()
                 } label: {
@@ -395,16 +409,6 @@ struct MarkdownTopToolsView: View {
                 }
                 .buttonStyle(MarkdownToolbarButtonStyle())
                 .help("Clear current Markdown")
-            } results: {
-                MarkdownSearchResultsPopover(
-                    tabs: Array(store.filteredTabs.prefix(32)),
-                    activeTabID: store.activeTabID
-                ) { tab in
-                    rememberCurrentSelection()
-                    store.selectTab(tab.id)
-                    store.searchQuery = ""
-                    isShowingSearchResults = false
-                }
             }
         }
     }
@@ -428,12 +432,23 @@ struct PythonTopToolsView: View {
                 systemImage: "curlybraces.square"
             )
 
-            ToolbarSearchBox(
+            ToolbarSearchField(
                 placeholder: "py",
                 query: $codeStore.searchQuery,
                 resultCount: codeStore.filteredFiles.count,
                 isShowingResults: $isShowingSearchResults
             ) {
+                CodeSearchResultsPopover(
+                    files: Array(codeStore.filteredFiles.prefix(32)),
+                    activeFileID: codeStore.activeFileID
+                ) { file in
+                    codeStore.selectFile(file.id)
+                    codeStore.searchQuery = ""
+                    isShowingSearchResults = false
+                }
+            }
+
+            TopToolbarButtonStrip {
                 Button {
                     codeStore.syncFromDisk()
                 } label: {
@@ -460,15 +475,6 @@ struct PythonTopToolsView: View {
                 }
                 .buttonStyle(MarkdownToolbarButtonStyle())
                 .help("Clear Python output")
-            } results: {
-                CodeSearchResultsPopover(
-                    files: Array(codeStore.filteredFiles.prefix(32)),
-                    activeFileID: codeStore.activeFileID
-                ) { file in
-                    codeStore.selectFile(file.id)
-                    codeStore.searchQuery = ""
-                    isShowingSearchResults = false
-                }
             }
         }
     }
@@ -487,12 +493,24 @@ struct ShellTopToolsView: View {
                 systemImage: "dollarsign.square"
             )
 
-            ToolbarSearchBox(
+            ToolbarSearchField(
                 placeholder: "workspace",
                 query: $workspaceStore.searchQuery,
                 resultCount: workspaceStore.filteredWorkspaces.count,
                 isShowingResults: $isShowingSearchResults
             ) {
+                ShellWorkspaceSearchResultsPopover(
+                    workspaces: Array(workspaceStore.filteredWorkspaces.prefix(32)),
+                    activeWorkspaceID: workspaceStore.activeWorkspaceID
+                ) { workspace in
+                    workspaceStore.selectWorkspace(workspace.id)
+                    syncRunnerStorage()
+                    workspaceStore.searchQuery = ""
+                    isShowingSearchResults = false
+                }
+            }
+
+            TopToolbarButtonStrip {
                 Button {
                     workspaceStore.syncFromDisk()
                 } label: {
@@ -520,16 +538,6 @@ struct ShellTopToolsView: View {
                 }
                 .buttonStyle(MarkdownToolbarButtonStyle())
                 .help("Clear Shell output")
-            } results: {
-                ShellWorkspaceSearchResultsPopover(
-                    workspaces: Array(workspaceStore.filteredWorkspaces.prefix(32)),
-                    activeWorkspaceID: workspaceStore.activeWorkspaceID
-                ) { workspace in
-                    workspaceStore.selectWorkspace(workspace.id)
-                    syncRunnerStorage()
-                    workspaceStore.searchQuery = ""
-                    isShowingSearchResults = false
-                }
             }
         }
         .onAppear(perform: syncRunnerStorage)
@@ -587,50 +595,12 @@ struct TerminalTopToolsView: View {
                 systemImage: "terminal.fill"
             )
 
-            ToolbarSearchBox(
+            ToolbarSearchField(
                 placeholder: "term",
                 query: $taskStore.searchQuery,
                 resultCount: taskStore.filteredTasks.count,
                 isShowingResults: $isShowingSearchResults
             ) {
-                Button {
-                    taskStore.refresh()
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .frame(width: 24, height: 22)
-                }
-                .buttonStyle(MarkdownToolbarButtonStyle())
-                .help("Refresh terminal tasks")
-
-                Button {
-                    taskStore.refreshSelectedTerminalSnapshot()
-                } label: {
-                    Image(systemName: "text.viewfinder")
-                        .frame(width: 24, height: 22)
-                }
-                .buttonStyle(MarkdownToolbarButtonStyle())
-                .disabled(taskStore.selectedTask == nil || taskStore.isTerminalBridgeBusy)
-                .help("Refresh Terminal contents")
-
-                Button {
-                    taskStore.focusSelectedTerminal()
-                } label: {
-                    Image(systemName: "arrow.up.forward.app")
-                        .frame(width: 24, height: 22)
-                }
-                .buttonStyle(MarkdownToolbarButtonStyle())
-                .disabled(taskStore.selectedTask == nil || taskStore.isTerminalBridgeBusy)
-                .help("Focus Terminal tab")
-
-                Button {
-                    taskStore.openTerminal()
-                } label: {
-                    Image(systemName: "macwindow")
-                        .frame(width: 24, height: 22)
-                }
-                .buttonStyle(MarkdownToolbarButtonStyle())
-                .help("Open Terminal")
-            } results: {
                 TerminalTaskSearchResultsPopover(
                     tasks: Array(taskStore.filteredTasks.prefix(40)),
                     selectedTaskID: taskStore.selectedTask?.id
@@ -639,6 +609,31 @@ struct TerminalTopToolsView: View {
                     taskStore.searchQuery = ""
                     isShowingSearchResults = false
                 }
+            }
+
+            TopToolbarButtonStrip {
+                Button {
+                    taskStore.refresh()
+                    if taskStore.selectedTask?.canReceiveTerminalInput == true {
+                        taskStore.refreshSelectedTerminalSnapshot(silent: true)
+                    }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .frame(width: 24, height: 22)
+                }
+                .buttonStyle(MarkdownToolbarButtonStyle())
+                .disabled(taskStore.isRefreshing)
+                .help("Refresh terminal tasks")
+
+                Button {
+                    taskStore.openNewTerminalWindow()
+                } label: {
+                    Image(systemName: "plus")
+                        .frame(width: 24, height: 22)
+                }
+                .buttonStyle(MarkdownToolbarButtonStyle())
+                .disabled(taskStore.isTerminalBridgeBusy)
+                .help("New Terminal")
             }
         }
     }
@@ -672,19 +667,37 @@ struct TerminalTaskSearchResultsPopover: View {
     }
 }
 
-struct ToolbarSearchBox<Actions: View, Results: View>: View {
+struct TopToolbarButtonStrip<Content: View>: View {
+    let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        HStack(spacing: 3) {
+            content
+        }
+        .padding(.horizontal, 3)
+        .frame(height: 28)
+        .background(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(.white.opacity(0.035))
+        )
+    }
+}
+
+struct ToolbarSearchField<Results: View>: View {
     let placeholder: String
     @Binding var query: String
     let resultCount: Int
     @Binding var isShowingResults: Bool
-    @ViewBuilder let actions: () -> Actions
     @ViewBuilder let results: () -> Results
 
-    @State private var isHovering = false
     @FocusState private var isFocused: Bool
 
-    private var isExpanded: Bool {
-        isHovering || isFocused || !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    private var hasQuery: Bool {
+        !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var body: some View {
@@ -693,38 +706,29 @@ struct ToolbarSearchBox<Actions: View, Results: View>: View {
                 .foregroundStyle(.white.opacity(0.62))
                 .frame(width: 16, height: 22)
 
-            if isExpanded {
-                TextField(placeholder, text: $query)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.88))
-                    .focused($isFocused)
-                    .onChange(of: query) { _, nextQuery in
-                        isShowingResults = !nextQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    }
-
-                if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text("\(resultCount)")
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.42))
-                        .frame(minWidth: 22, alignment: .trailing)
+            TextField(placeholder, text: $query)
+                .textFieldStyle(.plain)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.88))
+                .focused($isFocused)
+                .onChange(of: query) { _, nextQuery in
+                    isShowingResults = !nextQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 }
 
-                actions()
+            if hasQuery {
+                Text("\(resultCount)")
+                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.42))
+                    .frame(minWidth: 22, alignment: .trailing)
             }
         }
-        .padding(.horizontal, isExpanded ? 8 : 6)
-        .frame(width: isExpanded ? 300 : 28, height: 28, alignment: .leading)
+        .padding(.horizontal, 8)
+        .frame(width: 188, height: 28, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(.white.opacity(isExpanded ? 0.055 : 0.035))
+                .fill(.white.opacity(isFocused ? 0.065 : 0.045))
         )
         .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-        .onHover { hovering in
-            withAnimation(.easeOut(duration: 0.14)) {
-                isHovering = hovering
-            }
-        }
         .popover(isPresented: $isShowingResults, arrowEdge: .bottom) {
             results()
         }
@@ -956,7 +960,7 @@ struct PythonWorkspaceView: View {
                 .fill(.white.opacity(0.045))
                 .frame(width: size.width, height: separatorHeight)
 
-            OutputView(output: runner.output)
+            OutputView(output: pythonOutputText)
                 .frame(width: size.width, height: outputHeight)
 
             Rectangle()
@@ -981,6 +985,20 @@ struct PythonWorkspaceView: View {
 
     private var editorHeight: CGFloat {
         max(size.height - outputHeight - toolbarHeight - separatorHeight * 2, 120)
+    }
+
+    private var pythonOutputText: String {
+        guard runner.output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return runner.output
+        }
+
+        let status = runner.isRunning ? "running" : "ready"
+        return """
+        Python \(status)
+        env  \(condaStore.selectedEnvironmentName)
+        file \(codeStore.activeFile.fileName)
+        cwd  \(directoryStore.pythonProjectDirectoryURL.path)
+        """
     }
 }
 
@@ -1083,7 +1101,11 @@ struct PythonEnvironmentPicker: View {
         }
         .buttonStyle(FilePillButtonStyle(isSelected: isShowingEnvironmentPicker))
         .help("Python environment")
-        .popover(isPresented: $isShowingEnvironmentPicker, arrowEdge: .top) {
+        .popover(
+            isPresented: $isShowingEnvironmentPicker,
+            attachmentAnchor: .point(leftPickerPopoverAnchor),
+            arrowEdge: .top
+        ) {
             SearchResultsContainer {
                 if condaStore.environments.isEmpty {
                     EmptySearchResultView()
@@ -1293,9 +1315,13 @@ struct ActiveFileBadge: View {
 
 struct SearchResultsContainer<Content: View>: View {
     let content: Content
+    let width: CGFloat
+    let height: CGFloat
 
-    init(@ViewBuilder content: () -> Content) {
+    init(width: CGFloat = 260, height: CGFloat = 260, @ViewBuilder content: () -> Content) {
         self.content = content()
+        self.width = width
+        self.height = height
     }
 
     var body: some View {
@@ -1305,7 +1331,7 @@ struct SearchResultsContainer<Content: View>: View {
             }
             .padding(6)
         }
-        .frame(width: 420, height: 280)
+        .frame(width: width, height: height)
         .background(Color(red: 0.04, green: 0.042, blue: 0.05))
     }
 }
@@ -1550,7 +1576,11 @@ struct ShellToolkitPicker: View {
         }
         .buttonStyle(FilePillButtonStyle(isSelected: isShowingToolkitPicker))
         .help("Shell toolkit")
-        .popover(isPresented: $isShowingToolkitPicker, arrowEdge: .top) {
+        .popover(
+            isPresented: $isShowingToolkitPicker,
+            attachmentAnchor: .point(leftPickerPopoverAnchor),
+            arrowEdge: .top
+        ) {
             SearchResultsContainer {
                 ForEach(commandStore.toolkits) { toolkit in
                     Button {
@@ -1757,42 +1787,23 @@ struct TerminalTasksPane: View {
     let size: CGSize
     let onJumpToManagedTask: (TerminalTask) -> Void
 
+    private let statusHeight: CGFloat = 132
     private let toolbarHeight: CGFloat = 34
     private let separatorHeight: CGFloat = 1
-    private let spacing: CGFloat = 8
     private let snapshotTimer = Timer.publish(every: 2.0, on: .main, in: .common).autoconnect()
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: spacing) {
-                ScrollView {
-                    LazyVStack(spacing: 6) {
-                        if taskStore.filteredTasks.isEmpty {
-                            EmptyTerminalTasksView()
-                        } else {
-                            ForEach(taskStore.filteredTasks) { task in
-                                Button {
-                                    taskStore.select(task)
-                                } label: {
-                                    TerminalTaskRow(
-                                        task: task,
-                                        isSelected: task.id == taskStore.selectedTask?.id
-                                    )
-                                }
-                                .buttonStyle(FilePillButtonStyle(isSelected: task.id == taskStore.selectedTask?.id))
-                                .help(task.title)
-                            }
-                        }
-                    }
-                    .padding(2)
-                }
-                .frame(width: max(size.width * 0.36, 250), height: contentHeight)
-                .background(Color(red: 0.04, green: 0.042, blue: 0.05))
+            TerminalSnapshotView(taskStore: taskStore)
+                .frame(width: size.width, height: snapshotHeight)
+                .background(Color(red: 0.045, green: 0.047, blue: 0.055))
 
-                TerminalTaskLiveDetailView(taskStore: taskStore)
-                    .frame(width: max(size.width * 0.64 - spacing, 300), height: contentHeight)
-            }
-            .frame(width: size.width, height: contentHeight)
+            Rectangle()
+                .fill(.white.opacity(0.045))
+                .frame(width: size.width, height: separatorHeight)
+
+            TerminalTaskStatusView(taskStore: taskStore)
+                .frame(width: size.width, height: statusHeight)
 
             Rectangle()
                 .fill(.white.opacity(0.045))
@@ -1806,68 +1817,118 @@ struct TerminalTasksPane: View {
                 .background(Color(red: 0.055, green: 0.055, blue: 0.065))
         }
         .frame(width: size.width, height: size.height)
+        .onAppear(perform: refreshCurrentSnapshotIfReadable)
+        .onChange(of: taskStore.selectedTaskID) { _, _ in
+            refreshCurrentSnapshotIfReadable()
+        }
         .onReceive(snapshotTimer) { _ in
-            if taskStore.terminalSnapshot != nil {
+            if taskStore.selectedTask?.canReceiveTerminalInput == true,
+               taskStore.terminalSnapshot != nil {
                 taskStore.refreshSelectedTerminalSnapshot(silent: true)
             }
         }
     }
 
-    private var contentHeight: CGFloat {
-        max(size.height - toolbarHeight - separatorHeight, 160)
+    private var snapshotHeight: CGFloat {
+        max(size.height - statusHeight - toolbarHeight - separatorHeight * 2, 120)
+    }
+
+    private func refreshCurrentSnapshotIfReadable() {
+        guard taskStore.selectedTask?.canReceiveTerminalInput == true else { return }
+        taskStore.refreshSelectedTerminalSnapshot(silent: true)
     }
 }
 
-struct TerminalTaskLiveDetailView: View {
+struct TerminalSnapshotView: View {
     @ObservedObject var taskStore: TerminalTaskStore
 
     private var selectedTask: TerminalTask? {
         taskStore.selectedTask
     }
 
-    private var outputText: String {
+    private var snapshotText: String {
+        guard let selectedTask else { return "No terminal task selected" }
+
+        guard selectedTask.canReceiveTerminalInput else {
+            return "\(selectedTask.readOnlyReason)\n\n\(taskStore.processSummary(for: selectedTask))"
+        }
+
         if let contents = taskStore.terminalSnapshot?.contents,
            !contents.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return contents
         }
 
-        if let message = taskStore.terminalBridgeMessage,
-           !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return message + "\n\n" + taskStore.processSummary(for: selectedTask)
+        if taskStore.terminalSnapshot != nil {
+            return "Terminal tab is empty\n\(selectedTask.tty)"
         }
 
-        return taskStore.processSummary(for: selectedTask)
+        if taskStore.isTerminalBridgeBusy {
+            return "Reading Terminal tab...\n\(selectedTask.tty)"
+        }
+
+        return "No Terminal snapshot yet\nRefresh to read \(selectedTask.tty)"
+    }
+
+    var body: some View {
+        OutputView(output: snapshotText)
+    }
+}
+
+struct TerminalTaskStatusView: View {
+    @ObservedObject var taskStore: TerminalTaskStore
+
+    private var selectedTask: TerminalTask? {
+        taskStore.selectedTask
+    }
+
+    private var operationText: String {
+        if taskStore.isTerminalBridgeBusy {
+            return "Working"
+        }
+        return taskStore.terminalBridgeMessage ?? "Ready"
+    }
+
+    private var statusText: String {
+        guard let selectedTask else { return "No terminal task selected" }
+
+        let target = selectedTask.canReceiveTerminalInput
+            ? "writable Terminal.app tab"
+            : "read-only: \(selectedTask.readOnlyReason)"
+        let snapshotStatus: String
+        if let snapshot = taskStore.terminalSnapshot {
+            snapshotStatus = "\(snapshot.tty)  \(snapshot.isBusy ? "busy" : "idle")"
+        } else {
+            snapshotStatus = "not loaded"
+        }
+
+        return """
+        operation      \(operationText)
+        target         \(target)
+        tty            \(selectedTask.tty)
+        pgid           \(selectedTask.processGroupID)
+        representative \(selectedTask.representativePID)
+        state          \(selectedTask.state)  \(selectedTask.elapsed)
+        processes      \(selectedTask.processCount)
+        snapshot       \(snapshotStatus)
+        command        \(TerminalTaskStore.shortCommand(selectedTask.command))
+        """
     }
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                Image(systemName: taskStore.terminalSnapshot == nil ? "list.bullet.rectangle" : "terminal.fill")
+                Image(systemName: taskStore.terminalOperationIsError ? "exclamationmark.triangle" : "info.circle")
                     .foregroundStyle(.white.opacity(0.58))
                     .frame(width: 16)
 
-                Text(selectedTask?.tty ?? "no tty")
+                Text("Task status")
                     .font(.system(size: 11, weight: .semibold, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.82))
 
-                if let snapshot = taskStore.terminalSnapshot {
-                    Text(snapshot.isBusy ? "busy" : "idle")
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.white.opacity(snapshot.isBusy ? 0.66 : 0.42))
-                        .lineLimit(1)
-
-                    if !snapshot.processes.isEmpty {
-                        Text(snapshot.processes)
-                            .font(.system(size: 10, weight: .medium, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.38))
-                            .lineLimit(1)
-                    }
-                } else if let selectedTask {
-                    Text(selectedTask.detail)
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.42))
-                        .lineLimit(1)
-                }
+                Text(operationText)
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.white.opacity(taskStore.terminalOperationIsError ? 0.72 : 0.42))
+                    .lineLimit(1)
 
                 Spacer(minLength: 0)
 
@@ -1882,7 +1943,15 @@ struct TerminalTaskLiveDetailView: View {
             .frame(height: 30)
             .background(Color(red: 0.04, green: 0.042, blue: 0.05))
 
-            OutputView(output: outputText)
+            ScrollView {
+                Text(statusText)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.76))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .padding(10)
+            }
+            .background(Color(red: 0.035, green: 0.037, blue: 0.044))
         }
     }
 }
@@ -1890,20 +1959,16 @@ struct TerminalTaskLiveDetailView: View {
 struct TerminalInputToolbar: View {
     @ObservedObject var taskStore: TerminalTaskStore
     let onJumpToManagedTask: (TerminalTask) -> Void
+    @State private var isShowingTaskPicker = false
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "terminal")
-                .foregroundStyle(.white.opacity(0.54))
-                .frame(width: 16)
+            TerminalTaskPicker(
+                taskStore: taskStore,
+                isShowingTaskPicker: $isShowingTaskPicker
+            )
 
-            TextField("Terminal command", text: $taskStore.terminalInput)
-                .textFieldStyle(.plain)
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.9))
-                .onSubmit {
-                    taskStore.runTerminalInput()
-                }
+            TerminalCommandField(taskStore: taskStore)
 
             Button {
                 if let task = taskStore.selectedTask, task.isNotchwowManaged {
@@ -1916,7 +1981,7 @@ struct TerminalInputToolbar: View {
                     .frame(width: 26, height: 24)
             }
             .buttonStyle(MarkdownToolbarButtonStyle())
-            .disabled(taskStore.selectedTask == nil || taskStore.isTerminalBridgeBusy)
+            .disabled(!canFocusOrJump || taskStore.isTerminalBridgeBusy)
             .help(taskStore.selectedTask?.isNotchwowManaged == true ? "Jump to notchwow pane" : "Focus Terminal tab")
 
             Button {
@@ -1926,7 +1991,7 @@ struct TerminalInputToolbar: View {
                     .frame(width: 26, height: 24)
             }
             .buttonStyle(MarkdownToolbarButtonStyle())
-            .disabled(taskStore.isTerminalBridgeBusy)
+            .disabled(!canRunInput)
             .help("Run in Terminal")
 
             Button {
@@ -1951,43 +2016,116 @@ struct TerminalInputToolbar: View {
         }
         .padding(.horizontal, 10)
     }
+
+    private var canFocusOrJump: Bool {
+        guard let selectedTask = taskStore.selectedTask else { return false }
+        return selectedTask.isNotchwowManaged || selectedTask.canReceiveTerminalInput
+    }
+
+    private var canRunInput: Bool {
+        taskStore.canSendTerminalInput
+            && !taskStore.isTerminalBridgeBusy
+            && !taskStore.terminalInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 }
 
-struct TerminalTaskRow: View {
-    let task: TerminalTask
-    let isSelected: Bool
+struct TerminalTaskPicker: View {
+    @ObservedObject var taskStore: TerminalTaskStore
+    @Binding var isShowingTaskPicker: Bool
 
     var body: some View {
-        HStack(spacing: 9) {
-            Image(systemName: task.systemImage)
-                .foregroundStyle(.white.opacity(isSelected ? 0.82 : 0.56))
-                .frame(width: 16)
+        Button {
+            isShowingTaskPicker.toggle()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: taskStore.selectedTask?.systemImage ?? "terminal")
+                    .frame(width: 15)
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(task.title)
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(.white.opacity(isSelected ? 0.92 : 0.78))
+                Text(taskStore.selectedTask?.tty ?? "term")
+                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
                     .lineLimit(1)
 
-                HStack(spacing: 8) {
-                    Text(task.detail)
-                    Text(task.elapsed)
-                    Text(task.state)
-                }
-                .font(.system(size: 10, weight: .medium, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.42))
-                .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.38))
             }
-
-            Spacer(minLength: 0)
+            .foregroundStyle(.white.opacity(0.78))
+            .frame(width: 118, height: 24, alignment: .leading)
+            .padding(.horizontal, 8)
+            .contentShape(Rectangle())
         }
-        .frame(minHeight: 42)
-        .padding(.horizontal, 10)
-        .contentShape(Rectangle())
+        .buttonStyle(FilePillButtonStyle(isSelected: isShowingTaskPicker))
+        .help("Terminal task")
+        .popover(
+            isPresented: $isShowingTaskPicker,
+            attachmentAnchor: .point(leftPickerPopoverAnchor),
+            arrowEdge: .top
+        ) {
+            TerminalTaskSearchResultsPopover(
+                tasks: taskStore.tasks,
+                selectedTaskID: taskStore.selectedTask?.id
+            ) { task in
+                taskStore.select(task)
+                isShowingTaskPicker = false
+            }
+        }
+    }
+}
+
+struct TerminalCommandField: View {
+    @ObservedObject var taskStore: TerminalTaskStore
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "terminal")
+                .foregroundStyle(.white.opacity(0.54))
+                .frame(width: 15, height: 22)
+
+            TextField(placeholder, text: $taskStore.terminalInput)
+                .textFieldStyle(.plain)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(.white.opacity(canType ? 0.9 : 0.38))
+                .disabled(!canType)
+                .onSubmit {
+                    taskStore.runTerminalInput()
+                }
+        }
+        .padding(.horizontal, 8)
+        .frame(maxWidth: .infinity)
+        .frame(height: 26, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(.white.opacity(0.045))
+        )
+    }
+
+    private var canType: Bool {
+        taskStore.canSendTerminalInput && !taskStore.isTerminalBridgeBusy
+    }
+
+    private var placeholder: String {
+        guard taskStore.selectedTask != nil else { return "No Terminal target" }
+        return taskStore.canSendTerminalInput ? "Terminal command" : "Read-only task"
     }
 }
 
 extension TerminalTask {
+    var readOnlyReason: String {
+        if isNotchwowManaged {
+            return "notchwow-managed task"
+        }
+        if isZombieOnly {
+            return "zombie process group"
+        }
+        if !isTerminalAppBacked {
+            return "not backed by Terminal.app"
+        }
+        if tty == "??" || tty == "notchwow" {
+            return "no writable tty"
+        }
+        return "read-only task"
+    }
+
     var systemImage: String {
         if isNotchwowManaged {
             return title.localizedCaseInsensitiveContains("python")
@@ -2008,121 +2146,6 @@ extension TerminalTask {
             return "chevron.left.forwardslash.chevron.right"
         }
         return "terminal"
-    }
-}
-
-struct TerminalTaskDetailView: View {
-    let task: TerminalTask?
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 8) {
-                if let task {
-                    HStack(spacing: 8) {
-                        Image(systemName: "list.bullet.rectangle")
-                            .foregroundStyle(.white.opacity(0.58))
-                            .frame(width: 16)
-
-                        Text("pgid \(task.processGroupID)")
-                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.82))
-
-                        Text(task.tty)
-                            .font(.system(size: 10, weight: .medium, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.42))
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.top, 6)
-
-                    ForEach(task.processes) { process in
-                        TerminalProcessRow(process: process)
-                    }
-                } else {
-                    EmptyTerminalTasksView()
-                }
-            }
-            .padding(2)
-        }
-        .background(Color(red: 0.035, green: 0.037, blue: 0.044))
-    }
-}
-
-struct TerminalProcessRow: View {
-    let process: TerminalProcessInfo
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 8) {
-                Text("\(process.pid)")
-                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.58))
-                    .frame(width: 48, alignment: .leading)
-
-                Text(process.state)
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.white.opacity(process.state.contains("Z") ? 0.68 : 0.42))
-                    .frame(width: 34, alignment: .leading)
-
-                Text(process.elapsed)
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.42))
-
-                Spacer(minLength: 0)
-            }
-
-            Text(process.shortCommand)
-                .font(.system(size: 10, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.76))
-                .lineLimit(2)
-                .textSelection(.enabled)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .background(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(.white.opacity(0.035))
-        )
-    }
-}
-
-struct EmptyTerminalTasksView: View {
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "terminal")
-                .foregroundStyle(.white.opacity(0.42))
-                .frame(width: 16)
-
-            Text("No terminal tasks")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.48))
-
-            Spacer(minLength: 0)
-        }
-        .frame(height: 40)
-        .padding(.horizontal, 10)
-    }
-}
-
-struct TaskActionButton: View {
-    let title: String
-    let systemImage: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                Image(systemName: systemImage)
-                    .frame(width: 16)
-                Text(title)
-                    .font(.system(size: 12, weight: .semibold))
-                    .lineLimit(1)
-                Spacer(minLength: 0)
-            }
-            .frame(height: 34)
-            .padding(.horizontal, 10)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(FilePillButtonStyle(isSelected: false))
     }
 }
 

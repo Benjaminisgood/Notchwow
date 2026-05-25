@@ -30,6 +30,7 @@ struct TerminalTask: Identifiable, Equatable, Sendable {
     let command: String
     let processes: [TerminalProcessInfo]
     let isNotchwowManaged: Bool
+    let isTerminalAppBacked: Bool
 
     var processCount: Int {
         processes.count
@@ -37,6 +38,14 @@ struct TerminalTask: Identifiable, Equatable, Sendable {
 
     var isZombieOnly: Bool {
         !processes.isEmpty && processes.allSatisfy { $0.state.contains("Z") }
+    }
+
+    var canReceiveTerminalInput: Bool {
+        isTerminalAppBacked
+            && !isNotchwowManaged
+            && !isZombieOnly
+            && tty != "??"
+            && tty != "notchwow"
     }
 }
 
@@ -50,10 +59,10 @@ final class TerminalTaskStore: ObservableObject {
     @Published private(set) var isRefreshing = false
     @Published private(set) var terminalSnapshot: TerminalTabSnapshot?
     @Published private(set) var terminalBridgeMessage: String?
+    @Published private(set) var terminalOperationIsError = false
     @Published private(set) var isTerminalBridgeBusy = false
 
     private var refreshTimer: Timer?
-    private var suggestedTerminalInput = ""
 
     init() {
         refresh()
@@ -67,6 +76,10 @@ final class TerminalTaskStore: ObservableObject {
     var selectedTask: TerminalTask? {
         guard let selectedTaskID else { return tasks.first }
         return tasks.first { $0.id == selectedTaskID } ?? tasks.first
+    }
+
+    var canSendTerminalInput: Bool {
+        selectedTask?.canReceiveTerminalInput == true
     }
 
     var filteredTasks: [TerminalTask] {
@@ -108,23 +121,25 @@ final class TerminalTaskStore: ObservableObject {
             selectedTaskID = nextTasks.first?.id
         }
 
-        if previousTaskID != selectedTaskID, let selectedTask {
-            updateTerminalInputSuggestion(for: selectedTask)
+        if previousTaskID != selectedTaskID {
+            terminalInput = ""
             terminalSnapshot = nil
-            terminalBridgeMessage = nil
-        } else if terminalInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, let selectedTask {
-            updateTerminalInputSuggestion(for: selectedTask)
+            setTerminalOperationMessage(nil)
         }
+        clearInputIfSelectedTaskCannotReceiveInput()
 
         lastRefresh = Date()
     }
 
     func select(_ task: TerminalTask) {
-        let previousTask = selectedTask
+        let previousTaskID = selectedTaskID
         selectedTaskID = task.id
-        updateTerminalInputSuggestion(for: task, replacingPreviousTask: previousTask)
+        if previousTaskID != selectedTaskID {
+            terminalInput = ""
+        }
         terminalSnapshot = nil
-        terminalBridgeMessage = nil
+        setTerminalOperationMessage(nil)
+        clearInputIfSelectedTaskCannotReceiveInput()
     }
 
     func terminateSelectedTask() {
@@ -149,10 +164,10 @@ final class TerminalTaskStore: ObservableObject {
         } completion: { [weak self] result in
             switch result {
             case .success:
-                self?.terminalBridgeMessage = nil
+                self?.setTerminalOperationMessage("New Terminal opened")
                 self?.refreshSoon()
             case .failure(let message):
-                self?.terminalBridgeMessage = message
+                self?.setTerminalOperationMessage(message, isError: true)
                 self?.refreshSoon()
             }
         }
@@ -165,7 +180,10 @@ final class TerminalTaskStore: ObservableObject {
         }
 
         guard !selectedTask.isNotchwowManaged else {
-            terminalBridgeMessage = "This process is managed by notchwow. Use the jump button to return to its Shell/Py pane."
+            setTerminalOperationMessage(
+                "This task is managed by notchwow. Use the jump button to return to its Shell/Py pane.",
+                isError: true
+            )
             return
         }
 
@@ -175,10 +193,10 @@ final class TerminalTaskStore: ObservableObject {
         } completion: { [weak self] result in
             switch result {
             case .success:
-                self?.terminalBridgeMessage = nil
+                self?.setTerminalOperationMessage("Focused")
             case .failure(let message):
                 self?.terminalSnapshot = nil
-                self?.terminalBridgeMessage = message
+                self?.setTerminalOperationMessage(message, isError: true)
             }
         }
     }
@@ -186,7 +204,7 @@ final class TerminalTaskStore: ObservableObject {
     func refreshSelectedTerminalSnapshot(silent: Bool = false) {
         guard let selectedTask else {
             terminalSnapshot = nil
-            terminalBridgeMessage = "No terminal task selected"
+            setTerminalOperationMessage("No terminal task selected", isError: true)
             return
         }
 
@@ -202,12 +220,14 @@ final class TerminalTaskStore: ObservableObject {
             switch result {
             case .success(let snapshot):
                 self.terminalSnapshot = snapshot
-                self.terminalBridgeMessage = nil
+                if !silent {
+                    self.setTerminalOperationMessage("Snapshot refreshed")
+                }
 
             case .failure(let message):
                 self.terminalSnapshot = nil
                 if !silent || self.terminalBridgeMessage == nil {
-                    self.terminalBridgeMessage = message
+                    self.setTerminalOperationMessage(message, isError: true)
                 }
             }
         }
@@ -215,6 +235,17 @@ final class TerminalTaskStore: ObservableObject {
 
     func runTerminalInput() {
         let command = terminalInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard canSendTerminalInput else {
+            terminalInput = ""
+            setTerminalOperationMessage(
+                selectedTask == nil
+                    ? "No terminal task selected"
+                    : "This task is not backed by a writable Terminal.app tab.",
+                isError: true
+            )
+            return
+        }
+
         guard !command.isEmpty else {
             focusSelectedTerminal()
             return
@@ -233,7 +264,8 @@ final class TerminalTaskStore: ObservableObject {
 
             switch result {
             case .success:
-                self.terminalBridgeMessage = nil
+                self.terminalInput = ""
+                self.setTerminalOperationMessage("Sent")
                 self.refreshSoon()
 
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
@@ -244,14 +276,14 @@ final class TerminalTaskStore: ObservableObject {
                 }
 
             case .failure(let message):
-                self.terminalBridgeMessage = message
+                self.setTerminalOperationMessage(message, isError: true)
             }
         }
     }
 
     func clearTerminalSnapshot() {
         terminalSnapshot = nil
-        terminalBridgeMessage = nil
+        setTerminalOperationMessage(nil)
     }
 
     func processSummary(for task: TerminalTask?) -> String {
@@ -269,20 +301,14 @@ final class TerminalTaskStore: ObservableObject {
         }
     }
 
-    private func updateTerminalInputSuggestion(
-        for task: TerminalTask,
-        replacingPreviousTask previousTask: TerminalTask? = nil
-    ) {
-        let command = task.command.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !command.isEmpty else { return }
+    private func clearInputIfSelectedTaskCannotReceiveInput() {
+        guard selectedTask?.canReceiveTerminalInput != true else { return }
+        terminalInput = ""
+    }
 
-        let currentInput = terminalInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        let previousCommand = previousTask?.command.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if currentInput.isEmpty || currentInput == suggestedTerminalInput || currentInput == previousCommand {
-            terminalInput = command
-            suggestedTerminalInput = command
-        }
+    private func setTerminalOperationMessage(_ message: String?, isError: Bool = false) {
+        terminalBridgeMessage = message
+        terminalOperationIsError = isError
     }
 
     private func runTerminalBridgeOperation<Value: Sendable>(
@@ -327,6 +353,7 @@ final class TerminalTaskStore: ObservableObject {
             .components(separatedBy: .newlines)
             .compactMap(parseProcessLine)
         let parentByPID = Dictionary(uniqueKeysWithValues: allProcesses.map { ($0.pid, $0.parentPID) })
+        let commandByPID = Dictionary(uniqueKeysWithValues: allProcesses.map { ($0.pid, $0.command) })
         let currentPID = getpid()
         let processes = allProcesses.filter { process in
             process.tty != "??" || isDescendant(process.pid, of: currentPID, parentByPID: parentByPID)
@@ -335,7 +362,14 @@ final class TerminalTaskStore: ObservableObject {
         let grouped = Dictionary(grouping: processes, by: \.processGroupID)
 
         return grouped.values
-            .compactMap { makeTask(from: $0, currentPID: currentPID, parentByPID: parentByPID) }
+            .compactMap {
+                makeTask(
+                    from: $0,
+                    currentPID: currentPID,
+                    parentByPID: parentByPID,
+                    commandByPID: commandByPID
+                )
+            }
             .sorted { lhs, rhs in
                 if lhs.tty == rhs.tty {
                     return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
@@ -373,7 +407,8 @@ final class TerminalTaskStore: ObservableObject {
     private nonisolated static func makeTask(
         from processes: [TerminalProcessInfo],
         currentPID: Int32,
-        parentByPID: [Int32: Int32]
+        parentByPID: [Int32: Int32],
+        commandByPID: [Int32: String]
     ) -> TerminalTask? {
         guard !processes.isEmpty else { return nil }
 
@@ -391,6 +426,9 @@ final class TerminalTaskStore: ObservableObject {
         let isManaged = sortedProcesses.contains { process in
             process.tty == "??" && isDescendant(process.pid, of: currentPID, parentByPID: parentByPID)
         }
+        let isTerminalAppBacked = sortedProcesses.contains { process in
+            hasTerminalAppAncestor(process.pid, parentByPID: parentByPID, commandByPID: commandByPID)
+        }
         let tty = isManaged && leader.tty == "??" ? "notchwow" : leader.tty
         let title = managedTitle(for: representative.command) ?? shortCommand(representative.command)
         let detail = "\(tty)  pgid \(leader.processGroupID)  \(sortedProcesses.count) proc"
@@ -407,7 +445,8 @@ final class TerminalTaskStore: ObservableObject {
             detail: detail,
             command: representative.command,
             processes: sortedProcesses,
-            isNotchwowManaged: isManaged
+            isNotchwowManaged: isManaged,
+            isTerminalAppBacked: isTerminalAppBacked
         )
     }
 
@@ -429,6 +468,36 @@ final class TerminalTaskStore: ObservableObject {
         }
 
         return false
+    }
+
+    private nonisolated static func hasTerminalAppAncestor(
+        _ pid: Int32,
+        parentByPID: [Int32: Int32],
+        commandByPID: [Int32: String]
+    ) -> Bool {
+        var currentPID = pid
+        var visited = Set<Int32>()
+
+        while currentPID > 0, !visited.contains(currentPID) {
+            visited.insert(currentPID)
+
+            if let command = commandByPID[currentPID],
+               isTerminalAppCommand(command) {
+                return true
+            }
+
+            guard let parentPID = parentByPID[currentPID], parentPID != currentPID else {
+                return false
+            }
+            currentPID = parentPID
+        }
+
+        return false
+    }
+
+    private nonisolated static func isTerminalAppCommand(_ command: String) -> Bool {
+        command.contains("/Terminal.app/Contents/MacOS/Terminal")
+            || command == "Terminal"
     }
 
     private nonisolated static func managedTitle(for command: String) -> String? {

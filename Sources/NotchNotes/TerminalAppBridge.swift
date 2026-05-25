@@ -99,32 +99,25 @@ enum TerminalAppBridge {
             return .failure("No Terminal command")
         }
 
-        let script: String
         if let tty {
-            script = findTabScript(tty: tty, action: .run(preparedCommand))
-        } else {
-            script = newTerminalScript(command: preparedCommand)
-        }
+            switch runAppleScript(findTabScript(tty: tty, action: .run(preparedCommand))) {
+            case .success(let output):
+                let fields = parseFields(output)
+                if fields.first == "OK" {
+                    return .success(())
+                }
+                return .failure(fields.dropFirst().first ?? output)
 
-        switch runAppleScript(script) {
-        case .success(let output):
-            let fields = parseFields(output)
-            if fields.first == "OK" {
-                return .success(())
+            case .failure(let message):
+                return .failure(message)
             }
-            return runNewTerminalFallback(command: preparedCommand, reason: fields.dropFirst().first ?? output)
-
-        case .failure(let message):
-            return runNewTerminalFallback(command: preparedCommand, reason: message)
         }
-    }
 
-    private static func runNewTerminalFallback(command: String, reason: String) -> TerminalBridgeResult<Void> {
-        switch runAppleScript(newTerminalScript(command: command)) {
+        switch runAppleScript(newTerminalScript(command: preparedCommand)) {
         case .success:
             return .success(())
-        case .failure(let fallbackMessage):
-            return .failure("\(reason)\n\(fallbackMessage)")
+        case .failure(let message):
+            return .failure(message)
         }
     }
 
