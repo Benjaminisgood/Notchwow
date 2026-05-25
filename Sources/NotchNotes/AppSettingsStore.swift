@@ -34,10 +34,26 @@ final class AppSettingsStore: ObservableObject {
         }
     }
 
+    @Published var bailianAPIKey: String {
+        didSet {
+            UserDefaults.standard.set(bailianAPIKey, forKey: Self.bailianAPIKeyKey)
+        }
+    }
+
+    @Published var bailianModel: String {
+        didSet {
+            UserDefaults.standard.set(bailianModel, forKey: Self.bailianModelKey)
+        }
+    }
+
     private static let triggerModeKey = "notchNotes.triggerMode"
+    private static let bailianAPIKeyKey = "notchNotes.bailianAPIKey"
+    private static let bailianModelKey = "notchNotes.bailianModel"
 
     init() {
         let rawMode = UserDefaults.standard.string(forKey: Self.triggerModeKey)
         triggerMode = rawMode.flatMap(TriggerMode.init(rawValue:)) ?? .hover
+        bailianAPIKey = UserDefaults.standard.string(forKey: Self.bailianAPIKeyKey) ?? ""
+        bailianModel = UserDefaults.standard.string(forKey: Self.bailianModelKey) ?? "qwen3-coder-plus"
     }
 }

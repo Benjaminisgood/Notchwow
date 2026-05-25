@@ -82,6 +82,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 modifiers: [.command, .option]
             )
         )
+        menu.addItem(
+            menuItem(
+                title: "New Shell Workspace",
+                action: #selector(newShellWorkspace),
+                keyEquivalent: "s",
+                modifiers: [.command, .option]
+            )
+        )
 
         menu.addItem(.separator())
 
@@ -200,6 +208,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func newPythonFile() {
         panelController?.newPythonFile()
+    }
+
+    @objc private func newShellWorkspace() {
+        panelController?.newShellWorkspace()
     }
 
     @objc private func runShellCommand() {

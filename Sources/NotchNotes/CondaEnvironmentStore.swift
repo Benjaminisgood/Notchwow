@@ -24,10 +24,11 @@ struct CondaEnvironment: Identifiable, Equatable, Sendable {
     }
 }
 
-struct PythonRunCommand {
-    let command: String
-    let displayCommand: String
-    let displayPrompt: String
+struct PythonLaunchConfiguration: Equatable {
+    let sessionKey: String
+    let executablePath: String
+    let arguments: [String]
+    let environment: [String: String]
 }
 
 @MainActor
@@ -38,10 +39,8 @@ final class CondaEnvironmentStore: ObservableObject {
     @Published private(set) var lastError: String?
 
     private static let selectedEnvironmentKey = "notchNotes.selectedCondaEnvironment"
-    private let condaBin: String
 
     init() {
-        condaBin = Self.resolveCondaExecutable()
         selectedEnvironmentName = UserDefaults.standard.string(forKey: Self.selectedEnvironmentKey) ?? "base"
         refresh()
     }
@@ -51,7 +50,7 @@ final class CondaEnvironmentStore: ObservableObject {
     }
 
     var condaExecutablePath: String {
-        condaBin
+        resolveCondaExecutable()
     }
 
     func select(_ name: String) {
@@ -64,7 +63,7 @@ final class CondaEnvironmentStore: ObservableObject {
 
         isRefreshing = true
         lastError = nil
-        let condaBin = condaBin
+        let condaBin = condaExecutablePath
         let currentSelection = selectedEnvironmentName
 
         DispatchQueue.global(qos: .userInitiated).async {
@@ -93,41 +92,60 @@ final class CondaEnvironmentStore: ObservableObject {
     }
 
     func condaCommand(_ arguments: String) -> String {
-        "\(condaBin.shellEscaped) \(arguments)"
-    }
-
-    func commandInSelectedEnvironment(_ command: String) -> String {
-        shellCommandInSelectedEnvironment(command)
-    }
-
-    func runPythonFileCommand(filePath: String) -> String {
-        if let pythonExecutablePath {
-            return "\(pythonExecutablePath.shellEscaped) \(filePath.shellEscaped)"
-        }
-
-        return "\(condaBin.shellEscaped) run -n \(selectedEnvironmentName.shellEscaped) python \(filePath.shellEscaped)"
+        "\(condaExecutablePath.shellEscaped) \(arguments)"
     }
 
     func runPythonFileDisplayCommand(filePath: String) -> String {
         URL(fileURLWithPath: filePath).lastPathComponent
     }
 
-    func pythonConsoleCommand(_ rawCommand: String) -> PythonRunCommand? {
-        let command = rawCommand.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !command.isEmpty else { return nil }
+    func pythonLaunchConfiguration(bridgeScript: String) -> PythonLaunchConfiguration {
+        if let pythonExecutablePath {
+            var environment = ["PYTHONUNBUFFERED": "1"]
 
-        if let shellCommand = Self.shellCommand(from: command) {
-            return PythonRunCommand(
-                command: shellCommandInSelectedEnvironment(shellCommand),
-                displayCommand: shortDisplay(shellCommand),
-                displayPrompt: "py!"
+            if let selectedEnvironmentPath {
+                let binPath = URL(fileURLWithPath: selectedEnvironmentPath, isDirectory: true)
+                    .appendingPathComponent("bin", isDirectory: true)
+                    .path
+                let inheritedPath = ProcessInfo.processInfo.environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
+                environment["CONDA_PREFIX"] = selectedEnvironmentPath
+                environment["PATH"] = "\(binPath):\(inheritedPath)"
+            }
+
+            return PythonLaunchConfiguration(
+                sessionKey: "\(selectedEnvironmentName)|\(pythonExecutablePath)",
+                executablePath: pythonExecutablePath,
+                arguments: ["-u", "-c", bridgeScript],
+                environment: environment
             )
         }
 
-        return PythonRunCommand(
-            command: pythonSnippetCommand(command),
-            displayCommand: shortDisplay(command),
-            displayPrompt: "py>"
+        let condaBin = condaExecutablePath
+        let condaArguments = [
+            "run",
+            "--no-capture-output",
+            "-n",
+            selectedEnvironmentName,
+            "python",
+            "-u",
+            "-c",
+            bridgeScript
+        ]
+
+        if condaBin.hasPrefix("/") {
+            return PythonLaunchConfiguration(
+                sessionKey: "\(selectedEnvironmentName)|\(condaBin)",
+                executablePath: condaBin,
+                arguments: condaArguments,
+                environment: ["PYTHONUNBUFFERED": "1"]
+            )
+        }
+
+        return PythonLaunchConfiguration(
+            sessionKey: "\(selectedEnvironmentName)|env:\(condaBin)",
+            executablePath: "/usr/bin/env",
+            arguments: [condaBin] + condaArguments,
+            environment: ["PYTHONUNBUFFERED": "1"]
         )
     }
 
@@ -137,10 +155,10 @@ final class CondaEnvironmentStore: ObservableObject {
         }
 
         if selectedEnvironmentName == "base" {
-            return WorkspacePaths.condaRoot.path
+            return condaRootURL.path
         }
 
-        let inferredPath = WorkspacePaths.condaRoot
+        let inferredPath = condaRootURL
             .appendingPathComponent("envs", isDirectory: true)
             .appendingPathComponent(selectedEnvironmentName, isDirectory: true)
             .path
@@ -157,86 +175,17 @@ final class CondaEnvironmentStore: ObservableObject {
         return path
     }
 
-    private func shellCommandInSelectedEnvironment(_ command: String) -> String {
-        if let selectedEnvironmentPath {
-            let binPath = URL(fileURLWithPath: selectedEnvironmentPath, isDirectory: true)
-                .appendingPathComponent("bin", isDirectory: true)
-                .path
-            return "PATH=\(binPath.shellEscaped):$PATH CONDA_PREFIX=\(selectedEnvironmentPath.shellEscaped) /bin/zsh -lc \(command.shellEscaped)"
-        }
-
-        return "\(condaBin.shellEscaped) run -n \(selectedEnvironmentName.shellEscaped) /bin/zsh -lc \(command.shellEscaped)"
+    var condaRootURL: URL {
+        WorkspacePaths.condaRoot
     }
 
-    private func pythonSnippetCommand(_ code: String) -> String {
-        let wrapper = Self.pythonSnippetWrapper(for: code)
-        if let pythonExecutablePath {
-            return "\(pythonExecutablePath.shellEscaped) -c \(wrapper.shellEscaped)"
-        }
-
-        return "\(condaBin.shellEscaped) run -n \(selectedEnvironmentName.shellEscaped) python -c \(wrapper.shellEscaped)"
-    }
-
-    private func shortDisplay(_ command: String) -> String {
-        let singleLine = command
-            .components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
-        guard singleLine.count > 96 else { return singleLine }
-        return String(singleLine.prefix(93)) + "..."
-    }
-
-    private nonisolated static func resolveCondaExecutable() -> String {
+    private func resolveCondaExecutable() -> String {
         let preferredPath = WorkspacePaths.condaExecutable.path
         if FileManager.default.isExecutableFile(atPath: preferredPath) {
             return preferredPath
         }
 
         return "conda"
-    }
-
-    private nonisolated static func shellCommand(from command: String) -> String? {
-        if command.hasPrefix("!") {
-            let shellCommand = String(command.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines)
-            return shellCommand.isEmpty ? nil : shellCommand
-        }
-
-        let shellPrefixes = [
-            "./", "/", "cd ", "ls", "pwd", "which ", "where ", "pip ", "python ",
-            "conda ", "mamba ", "uv ", "pytest", "git ", "cat ", "echo ",
-            "mkdir ", "rm ", "cp ", "mv ", "open ", "brew ", "curl ", "wget "
-        ]
-
-        return shellPrefixes.contains { prefix in
-            let commandName = prefix.trimmingCharacters(in: .whitespaces)
-            return command == commandName || command.hasPrefix(prefix)
-        }
-            ? command
-            : nil
-    }
-
-    private nonisolated static func pythonSnippetWrapper(for code: String) -> String {
-        let encodedCode = Data(code.utf8).base64EncodedString()
-        return """
-        import ast
-        import base64
-
-        _code = base64.b64decode("\(encodedCode)").decode("utf-8")
-        _parsed = ast.parse(_code, mode="exec")
-        if _parsed.body and isinstance(_parsed.body[-1], ast.Expr):
-            _prefix = ast.Module(body=_parsed.body[:-1], type_ignores=[])
-            ast.fix_missing_locations(_prefix)
-            exec(compile(_prefix, "<notchwow>", "exec"), globals(), globals())
-
-            _expression = ast.Expression(_parsed.body[-1].value)
-            ast.fix_missing_locations(_expression)
-            _result = eval(compile(_expression, "<notchwow>", "eval"), globals(), globals())
-            if _result is not None:
-                print(repr(_result))
-        else:
-            exec(compile(_parsed, "<notchwow>", "exec"), globals(), globals())
-        """
     }
 
     private nonisolated static func loadEnvironments(condaBin: String) -> Result<[CondaEnvironment], Error> {

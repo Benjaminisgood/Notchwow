@@ -10,16 +10,52 @@ struct ShellCommandItem: Identifiable, Equatable {
     let systemImage: String
 }
 
+struct ShellToolkit: Identifiable, Equatable {
+    let id: String
+    let name: String
+    let systemImage: String
+}
+
 @MainActor
 final class ShellCommandStore: ObservableObject {
     @Published private(set) var commands: [ShellCommandItem] = []
+    @Published private(set) var selectedToolkitName: String
+
+    private static let selectedToolkitKey = "notchNotes.selectedShellToolkit"
 
     init() {
+        selectedToolkitName = UserDefaults.standard.string(forKey: Self.selectedToolkitKey) ?? "benshell"
         refresh()
+    }
+
+    var toolkits: [ShellToolkit] {
+        let grouped = Dictionary(grouping: commands, by: \.group)
+        return grouped.keys
+            .sorted { lhs, rhs in
+                Self.toolkitSortKey(lhs).localizedStandardCompare(Self.toolkitSortKey(rhs)) == .orderedAscending
+            }
+            .map { group in
+                ShellToolkit(id: group, name: group, systemImage: Self.systemImage(for: group))
+            }
+    }
+
+    var selectedToolkit: ShellToolkit {
+        toolkits.first { $0.name == selectedToolkitName }
+            ?? toolkits.first
+            ?? ShellToolkit(id: "benshell", name: "benshell", systemImage: "terminal")
     }
 
     func refresh() {
         commands = Self.loadScriptCommands() + Self.loadAliasCommands()
+        if !toolkits.contains(where: { $0.name == selectedToolkitName }),
+           let firstToolkit = toolkits.first {
+            selectToolkit(firstToolkit.name)
+        }
+    }
+
+    func selectToolkit(_ name: String) {
+        selectedToolkitName = name
+        UserDefaults.standard.set(name, forKey: Self.selectedToolkitKey)
     }
 
     func filteredCommands(matching query: String) -> [ShellCommandItem] {
@@ -31,6 +67,20 @@ final class ShellCommandStore: ObservableObject {
                 || item.command.localizedCaseInsensitiveContains(trimmedQuery)
                 || item.summary.localizedCaseInsensitiveContains(trimmedQuery)
                 || item.group.localizedCaseInsensitiveContains(trimmedQuery)
+        }
+    }
+
+    func filteredCommands(in toolkitName: String, matching query: String) -> [ShellCommandItem] {
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedQuery.isEmpty else { return [] }
+
+        return commands.filter { item in
+            item.group == toolkitName
+                && (
+                    item.title.localizedCaseInsensitiveContains(trimmedQuery)
+                    || item.command.localizedCaseInsensitiveContains(trimmedQuery)
+                    || item.summary.localizedCaseInsensitiveContains(trimmedQuery)
+                )
         }
     }
 
@@ -186,6 +236,16 @@ final class ShellCommandStore: ObservableObject {
         case "papis": return "books.vertical"
         case "taptap": return "waveform.path.ecg"
         default: return "terminal"
+        }
+    }
+
+    private nonisolated static func toolkitSortKey(_ name: String) -> String {
+        switch name {
+        case "benshell": return "00-\(name)"
+        case "nanobot": return "01-\(name)"
+        case "deeptutor": return "02-\(name)"
+        case "taptap": return "03-\(name)"
+        default: return "10-\(name)"
         }
     }
 }

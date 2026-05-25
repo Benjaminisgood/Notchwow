@@ -13,15 +13,18 @@ struct NotebookView: View {
     @ObservedObject var store: NoteStore
     @ObservedObject var settingsStore: AppSettingsStore
     let imageStore: LocalImageStore
+    @ObservedObject var markdownAIStore: MarkdownAIEditStore
     @ObservedObject var drawerState: DrawerState
     @ObservedObject var editorInteractionState: EditorInteractionState
     @ObservedObject var workbenchState: WorkbenchState
     @ObservedObject var pythonStore: CodeFileStore
     @ObservedObject var shellCommandStore: ShellCommandStore
+    @ObservedObject var shellWorkspaceStore: ShellWorkspaceStore
     @ObservedObject var terminalTaskStore: TerminalTaskStore
     @ObservedObject var condaStore: CondaEnvironmentStore
+    @ObservedObject var directoryStore: WorkspaceDirectoryStore
     @ObservedObject var terminalRunner: CommandRunner
-    @ObservedObject var pythonRunner: CommandRunner
+    @ObservedObject var pythonRunner: PythonReplRunner
     let layout: NotchLayout
     let onOpenSettings: () -> Void
 
@@ -72,6 +75,7 @@ struct NotebookView: View {
                         editorInteractionState: editorInteractionState,
                         pythonStore: pythonStore,
                         shellCommandStore: shellCommandStore,
+                        shellWorkspaceStore: shellWorkspaceStore,
                         terminalTaskStore: terminalTaskStore,
                         terminalRunner: terminalRunner,
                         pythonRunner: pythonRunner
@@ -89,11 +93,16 @@ struct NotebookView: View {
                 WorkbenchContentView(
                     workbenchState: workbenchState,
                     store: store,
+                    settingsStore: settingsStore,
                     imageStore: imageStore,
+                    markdownAIStore: markdownAIStore,
                     editorInteractionState: editorInteractionState,
                     pythonStore: pythonStore,
+                    shellCommandStore: shellCommandStore,
+                    shellWorkspaceStore: shellWorkspaceStore,
                     terminalTaskStore: terminalTaskStore,
                     condaStore: condaStore,
+                    directoryStore: directoryStore,
                     terminalRunner: terminalRunner,
                     pythonRunner: pythonRunner,
                     size: workspaceSize
@@ -182,10 +191,13 @@ struct NotebookView: View {
 
 struct MarkdownEditorPanel: View {
     @ObservedObject var store: NoteStore
+    @ObservedObject var settingsStore: AppSettingsStore
     let imageStore: LocalImageStore
+    @ObservedObject var aiStore: MarkdownAIEditStore
     let editorInteractionState: EditorInteractionState
     let size: CGSize
 
+    private let outputHeight: CGFloat = 132
     private let toolbarHeight: CGFloat = 34
     private let separatorHeight: CGFloat = 1
 
@@ -202,14 +214,63 @@ struct MarkdownEditorPanel: View {
                 .fill(.white.opacity(0.045))
                 .frame(width: size.width, height: separatorHeight)
 
-            MarkdownShortcutToolbar(editorInteractionState: editorInteractionState)
+            MarkdownAIReviewView(aiStore: aiStore)
+                .frame(width: size.width, height: outputHeight)
+
+            Rectangle()
+                .fill(.white.opacity(0.045))
+                .frame(width: size.width, height: separatorHeight)
+
+            MarkdownShortcutToolbar(
+                editorInteractionState: editorInteractionState,
+                aiStore: aiStore,
+                onSubmitAI: submitAIEdit,
+                onAcceptAI: acceptAIEdit,
+                onRejectAI: aiStore.rejectProposal
+            )
                 .frame(width: size.width, height: toolbarHeight)
                 .background(Color(red: 0.055, green: 0.055, blue: 0.065))
         }
     }
 
     private var editorHeight: CGFloat {
-        max(size.height - toolbarHeight - separatorHeight, 120)
+        max(size.height - outputHeight - toolbarHeight - separatorHeight * 2, 120)
+    }
+
+    private func submitAIEdit() {
+        let range = editorInteractionState.currentSelectionRange()
+            ?? store.selectionRange(for: store.activeTabID)
+        store.updateSelection(for: store.activeTabID, range: range)
+        aiStore.submit(
+            settings: settingsStore,
+            tabID: store.activeTabID,
+            fileName: store.activeTab.fileName,
+            fullText: store.text,
+            selectedRange: range
+        )
+    }
+
+    private func acceptAIEdit() {
+        guard let proposal = aiStore.proposal else { return }
+        guard proposal.tabID == store.activeTabID,
+              proposal.originalDocument == store.text else {
+            aiStore.markProposalStale()
+            return
+        }
+        guard let nextText = proposal.proposedDocument() else {
+            aiStore.markProposalInvalid()
+            return
+        }
+
+        let nextSelection = NSRange(
+            location: proposal.range.location,
+            length: proposal.replacementText.utf16.count
+        )
+        store.updateText(nextText)
+        store.updateSelection(for: store.activeTabID, range: nextSelection)
+        editorInteractionState.restoreSelection(nextSelection)
+        editorInteractionState.requestLayoutRefresh()
+        aiStore.acceptProposal()
     }
 }
 
@@ -255,9 +316,10 @@ struct WorkbenchTopToolsView: View {
     let editorInteractionState: EditorInteractionState
     @ObservedObject var pythonStore: CodeFileStore
     @ObservedObject var shellCommandStore: ShellCommandStore
+    @ObservedObject var shellWorkspaceStore: ShellWorkspaceStore
     @ObservedObject var terminalTaskStore: TerminalTaskStore
     @ObservedObject var terminalRunner: CommandRunner
-    @ObservedObject var pythonRunner: CommandRunner
+    @ObservedObject var pythonRunner: PythonReplRunner
 
     var body: some View {
         Group {
@@ -269,7 +331,7 @@ struct WorkbenchTopToolsView: View {
                 )
             case .terminal:
                 ShellTopToolsView(
-                    commandStore: shellCommandStore,
+                    workspaceStore: shellWorkspaceStore,
                     runner: terminalRunner
                 )
             case .python:
@@ -296,7 +358,7 @@ struct MarkdownTopToolsView: View {
         HStack(spacing: 8) {
             ActiveFileBadge(
                 title: store.activeTab.title,
-                detail: store.activeTab.fileName,
+                detail: store.activeTab.filePath ?? store.activeTab.fileName,
                 systemImage: "doc.text"
             )
 
@@ -355,7 +417,7 @@ struct MarkdownTopToolsView: View {
 
 struct PythonTopToolsView: View {
     @ObservedObject var codeStore: CodeFileStore
-    @ObservedObject var runner: CommandRunner
+    @ObservedObject var runner: PythonReplRunner
     @State private var isShowingSearchResults = false
 
     var body: some View {
@@ -413,46 +475,42 @@ struct PythonTopToolsView: View {
 }
 
 struct ShellTopToolsView: View {
-    @ObservedObject var commandStore: ShellCommandStore
+    @ObservedObject var workspaceStore: ShellWorkspaceStore
     @ObservedObject var runner: CommandRunner
-    @State private var commandQuery = ""
     @State private var isShowingSearchResults = false
-
-    private var filteredCommands: [ShellCommandItem] {
-        commandStore.filteredCommands(matching: commandQuery)
-    }
 
     var body: some View {
         HStack(spacing: 8) {
             ActiveFileBadge(
-                title: runner.input.isEmpty ? "Shell session" : runner.input,
-                detail: runner.storagePath,
+                title: workspaceStore.activeWorkspace.title,
+                detail: workspaceStore.activeWorkspace.detail,
                 systemImage: "dollarsign.square"
             )
 
             ToolbarSearchBox(
-                placeholder: "shell",
-                query: $commandQuery,
-                resultCount: filteredCommands.count,
+                placeholder: "workspace",
+                query: $workspaceStore.searchQuery,
+                resultCount: workspaceStore.filteredWorkspaces.count,
                 isShowingResults: $isShowingSearchResults
             ) {
                 Button {
-                    commandStore.refresh()
+                    workspaceStore.syncFromDisk()
                 } label: {
                     Image(systemName: "arrow.clockwise")
                         .frame(width: 24, height: 22)
                 }
                 .buttonStyle(MarkdownToolbarButtonStyle())
-                .help("Refresh Benshell commands")
+                .help("Sync Shell workspaces")
 
                 Button {
-                    NSWorkspace.shared.open(WorkspacePaths.shellRoot)
+                    workspaceStore.addWorkspace()
+                    syncRunnerStorage()
                 } label: {
-                    Image(systemName: "folder")
+                    Image(systemName: "plus")
                         .frame(width: 24, height: 22)
                 }
                 .buttonStyle(MarkdownToolbarButtonStyle())
-                .help("Open Shell storage")
+                .help("New Shell workspace")
 
                 Button {
                     runner.clear()
@@ -463,15 +521,54 @@ struct ShellTopToolsView: View {
                 .buttonStyle(MarkdownToolbarButtonStyle())
                 .help("Clear Shell output")
             } results: {
-                ShellSearchResultsPopover(
-                    commands: Array(filteredCommands.prefix(40)),
-                    activeCommand: runner.input,
-                    isRunning: runner.isRunning
-                ) { item in
-                    runner.input = item.command
-                    runner.run(item.command)
-                    commandQuery = ""
+                ShellWorkspaceSearchResultsPopover(
+                    workspaces: Array(workspaceStore.filteredWorkspaces.prefix(32)),
+                    activeWorkspaceID: workspaceStore.activeWorkspaceID
+                ) { workspace in
+                    workspaceStore.selectWorkspace(workspace.id)
+                    syncRunnerStorage()
+                    workspaceStore.searchQuery = ""
                     isShowingSearchResults = false
+                }
+            }
+        }
+        .onAppear(perform: syncRunnerStorage)
+        .onChange(of: workspaceStore.activeWorkspaceID) { _, _ in
+            syncRunnerStorage()
+        }
+    }
+
+    private func syncRunnerStorage() {
+        let workspace = workspaceStore.activeWorkspace
+        runner.usePersistence(
+            inputURL: workspace.inputURL,
+            outputURL: workspace.transcriptURL
+        )
+    }
+}
+
+struct ShellWorkspaceSearchResultsPopover: View {
+    let workspaces: [ShellWorkspace]
+    let activeWorkspaceID: String
+    let onSelect: (ShellWorkspace) -> Void
+
+    var body: some View {
+        SearchResultsContainer {
+            if workspaces.isEmpty {
+                EmptySearchResultView()
+            } else {
+                ForEach(workspaces) { workspace in
+                    Button {
+                        onSelect(workspace)
+                    } label: {
+                        SearchResultRow(
+                            systemImage: "dollarsign.square",
+                            title: workspace.title,
+                            detail: workspace.detail
+                        )
+                    }
+                    .buttonStyle(FilePillButtonStyle(isSelected: workspace.id == activeWorkspaceID))
+                    .help(workspace.detail)
                 }
             }
         }
@@ -637,13 +734,18 @@ struct ToolbarSearchBox<Actions: View, Results: View>: View {
 struct WorkbenchContentView: View {
     @ObservedObject var workbenchState: WorkbenchState
     @ObservedObject var store: NoteStore
+    @ObservedObject var settingsStore: AppSettingsStore
     let imageStore: LocalImageStore
+    @ObservedObject var markdownAIStore: MarkdownAIEditStore
     let editorInteractionState: EditorInteractionState
     @ObservedObject var pythonStore: CodeFileStore
+    @ObservedObject var shellCommandStore: ShellCommandStore
+    @ObservedObject var shellWorkspaceStore: ShellWorkspaceStore
     @ObservedObject var terminalTaskStore: TerminalTaskStore
     @ObservedObject var condaStore: CondaEnvironmentStore
+    @ObservedObject var directoryStore: WorkspaceDirectoryStore
     @ObservedObject var terminalRunner: CommandRunner
-    @ObservedObject var pythonRunner: CommandRunner
+    @ObservedObject var pythonRunner: PythonReplRunner
     let size: CGSize
 
     var body: some View {
@@ -652,21 +754,38 @@ struct WorkbenchContentView: View {
             case .markdown:
                 MarkdownWorkspaceView(
                     store: store,
+                    settingsStore: settingsStore,
                     imageStore: imageStore,
+                    markdownAIStore: markdownAIStore,
                     editorInteractionState: editorInteractionState,
+                    directoryStore: directoryStore,
                     size: size
                 )
             case .terminal:
-                ShellPane(runner: terminalRunner, size: size)
+                ShellPane(
+                    commandStore: shellCommandStore,
+                    workspaceStore: shellWorkspaceStore,
+                    directoryStore: directoryStore,
+                    runner: terminalRunner,
+                    size: size
+                )
             case .python:
                 PythonWorkspaceView(
                     codeStore: pythonStore,
                     condaStore: condaStore,
+                    directoryStore: directoryStore,
                     runner: pythonRunner,
                     size: size
                 )
             case .tasks:
-                TerminalTasksPane(taskStore: terminalTaskStore, size: size)
+                TerminalTasksPane(
+                    taskStore: terminalTaskStore,
+                    size: size
+                ) { task in
+                    withAnimation(.easeOut(duration: 0.16)) {
+                        workbenchState.select(task.command.localizedCaseInsensitiveContains("python") ? .python : .terminal)
+                    }
+                }
             }
         }
     }
@@ -674,18 +793,35 @@ struct WorkbenchContentView: View {
 
 struct MarkdownWorkspaceView: View {
     @ObservedObject var store: NoteStore
+    @ObservedObject var settingsStore: AppSettingsStore
     let imageStore: LocalImageStore
+    @ObservedObject var markdownAIStore: MarkdownAIEditStore
     let editorInteractionState: EditorInteractionState
+    @ObservedObject var directoryStore: WorkspaceDirectoryStore
     let size: CGSize
 
     var body: some View {
         MarkdownEditorPanel(
             store: store,
+            settingsStore: settingsStore,
             imageStore: imageStore,
+            aiStore: markdownAIStore,
             editorInteractionState: editorInteractionState,
             size: size
         )
         .frame(width: size.width, height: size.height)
+        .onAppear {
+            useMarkdownWorkingDirectory()
+        }
+        .onChange(of: directoryStore.markdownWorkingDirectory) { _, _ in
+            useMarkdownWorkingDirectory()
+        }
+    }
+
+    private func useMarkdownWorkingDirectory() {
+        let root = directoryStore.markdownWorkingDirectoryURL
+        store.useMarkdownRoot(root)
+        imageStore.useMarkdownRoot(root)
     }
 }
 
@@ -717,7 +853,7 @@ struct MarkdownFileBar: View {
 
             ActiveFileBadge(
                 title: store.activeTab.title,
-                detail: store.activeTab.fileName,
+                detail: store.activeTab.filePath ?? store.activeTab.fileName,
                 systemImage: "doc.text"
             )
 
@@ -796,7 +932,8 @@ struct MarkdownSearchResultsPopover: View {
 struct PythonWorkspaceView: View {
     @ObservedObject var codeStore: CodeFileStore
     @ObservedObject var condaStore: CondaEnvironmentStore
-    @ObservedObject var runner: CommandRunner
+    @ObservedObject var directoryStore: WorkspaceDirectoryStore
+    @ObservedObject var runner: PythonReplRunner
     let size: CGSize
 
     private let outputHeight: CGFloat = 132
@@ -834,6 +971,12 @@ struct PythonWorkspaceView: View {
             .frame(width: size.width, height: toolbarHeight)
             .background(Color(red: 0.055, green: 0.055, blue: 0.065))
         }
+        .onAppear {
+            runner.useWorkingDirectory(directoryStore.pythonProjectDirectoryURL)
+        }
+        .onChange(of: directoryStore.pythonProjectDirectory) { _, _ in
+            runner.useWorkingDirectory(directoryStore.pythonProjectDirectoryURL)
+        }
     }
 
     private var editorHeight: CGFloat {
@@ -844,17 +987,22 @@ struct PythonWorkspaceView: View {
 struct PythonCommandToolbar: View {
     @ObservedObject var codeStore: CodeFileStore
     @ObservedObject var condaStore: CondaEnvironmentStore
-    @ObservedObject var runner: CommandRunner
+    @ObservedObject var runner: PythonReplRunner
+    @State private var isShowingEnvironmentPicker = false
 
     var body: some View {
         HStack(spacing: 8) {
-            Text(condaStore.selectedEnvironmentName)
-                .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.46))
-                .lineLimit(1)
-                .frame(maxWidth: 86, alignment: .leading)
+            PythonEnvironmentPicker(
+                condaStore: condaStore,
+                isShowingEnvironmentPicker: $isShowingEnvironmentPicker
+            )
 
-            TextField("python command", text: $runner.input)
+            Text(runner.prompt)
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.52))
+                .frame(width: 24, alignment: .leading)
+
+            TextField("Python", text: $runner.input)
                 .textFieldStyle(.plain)
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(.white.opacity(0.84))
@@ -873,12 +1021,12 @@ struct PythonCommandToolbar: View {
             Button {
                 runInputCommand()
             } label: {
-                Image(systemName: "terminal")
+                Image(systemName: "arrow.turn.down.left")
                     .frame(width: 26, height: 24)
             }
             .buttonStyle(MarkdownToolbarButtonStyle())
             .disabled(runner.isRunning)
-            .help("Run command in selected environment")
+            .help("Run Python input")
 
             Button {
                 runner.stop()
@@ -894,24 +1042,80 @@ struct PythonCommandToolbar: View {
     }
 
     private func runActiveFile() {
-        runner.run(
-            condaStore.runPythonFileCommand(filePath: codeStore.activeFile.filePath),
-            displayCommand: condaStore.runPythonFileDisplayCommand(filePath: codeStore.activeFile.filePath),
-            displayPrompt: "py file>",
-            showsSuccessfulExit: false
+        runner.runFile(
+            configuration: condaStore.pythonLaunchConfiguration(bridgeScript: PythonReplRunner.bridgeScript),
+            filePath: codeStore.activeFile.filePath,
+            displayName: condaStore.runPythonFileDisplayCommand(filePath: codeStore.activeFile.filePath)
         )
     }
 
     private func runInputCommand() {
-        guard let runCommand = condaStore.pythonConsoleCommand(runner.input) else { return }
-
         runner.run(
-            runCommand.command,
-            displayCommand: runCommand.displayCommand,
-            displayPrompt: runCommand.displayPrompt,
-            clearsInputOnRun: true,
-            showsSuccessfulExit: false
+            configuration: condaStore.pythonLaunchConfiguration(bridgeScript: PythonReplRunner.bridgeScript)
         )
+    }
+}
+
+struct PythonEnvironmentPicker: View {
+    @ObservedObject var condaStore: CondaEnvironmentStore
+    @Binding var isShowingEnvironmentPicker: Bool
+
+    var body: some View {
+        Button {
+            isShowingEnvironmentPicker.toggle()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "shippingbox")
+                    .frame(width: 15)
+
+                Text(condaStore.selectedEnvironmentName)
+                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    .lineLimit(1)
+
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.38))
+            }
+            .foregroundStyle(.white.opacity(0.78))
+            .frame(width: 118, height: 24, alignment: .leading)
+            .padding(.horizontal, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(FilePillButtonStyle(isSelected: isShowingEnvironmentPicker))
+        .help("Python environment")
+        .popover(isPresented: $isShowingEnvironmentPicker, arrowEdge: .top) {
+            SearchResultsContainer {
+                if condaStore.environments.isEmpty {
+                    EmptySearchResultView()
+                } else {
+                    ForEach(condaStore.environments) { environment in
+                        Button {
+                            condaStore.select(environment.name)
+                            isShowingEnvironmentPicker = false
+                        } label: {
+                            SearchResultRow(
+                                systemImage: environment.name == condaStore.selectedEnvironmentName ? "shippingbox.fill" : "shippingbox",
+                                title: environment.displayName,
+                                detail: environment.path
+                            )
+                        }
+                        .buttonStyle(FilePillButtonStyle(isSelected: environment.name == condaStore.selectedEnvironmentName))
+                        .help(environment.path)
+                    }
+                }
+
+                Button {
+                    condaStore.refresh()
+                } label: {
+                    SearchResultRow(
+                        systemImage: "arrow.clockwise",
+                        title: "Refresh",
+                        detail: "Reload conda environments"
+                    )
+                }
+                .buttonStyle(FilePillButtonStyle(isSelected: false))
+            }
+        }
     }
 }
 
@@ -1162,14 +1366,32 @@ struct EmptySearchResultView: View {
 }
 
 struct ShellPane: View {
+    @ObservedObject var commandStore: ShellCommandStore
+    @ObservedObject var workspaceStore: ShellWorkspaceStore
+    @ObservedObject var directoryStore: WorkspaceDirectoryStore
     @ObservedObject var runner: CommandRunner
     let size: CGSize
 
+    private let outputHeight: CGFloat = 132
     private let toolbarHeight: CGFloat = 34
     private let separatorHeight: CGFloat = 1
 
     var body: some View {
         VStack(spacing: 0) {
+            TextEditor(text: Binding(
+                get: { workspaceStore.scriptText },
+                set: { workspaceStore.updateScriptText($0) }
+            ))
+            .font(.system(size: 13, design: .monospaced))
+            .foregroundStyle(.white.opacity(0.9))
+            .scrollContentBackground(.hidden)
+            .background(Color(red: 0.045, green: 0.047, blue: 0.055))
+            .frame(width: size.width, height: editorHeight)
+
+            Rectangle()
+                .fill(.white.opacity(0.045))
+                .frame(width: size.width, height: separatorHeight)
+
             OutputView(output: runner.output)
                 .frame(width: size.width, height: outputHeight)
 
@@ -1177,43 +1399,88 @@ struct ShellPane: View {
                 .fill(.white.opacity(0.045))
                 .frame(width: size.width, height: separatorHeight)
 
-            ShellInputToolbar(runner: runner)
+            ShellInputToolbar(
+                commandStore: commandStore,
+                workspaceStore: workspaceStore,
+                runner: runner
+            )
                 .frame(width: size.width, height: toolbarHeight)
                 .background(Color(red: 0.055, green: 0.055, blue: 0.065))
         }
+        .onAppear {
+            runner.useWorkingDirectory(directoryStore.shellWorkingDirectoryURL)
+        }
+        .onChange(of: directoryStore.shellWorkingDirectory) { _, _ in
+            runner.useWorkingDirectory(directoryStore.shellWorkingDirectoryURL)
+        }
     }
 
-    private var outputHeight: CGFloat {
-        max(size.height - toolbarHeight - separatorHeight, 140)
+    private var editorHeight: CGFloat {
+        max(size.height - outputHeight - toolbarHeight - separatorHeight * 2, 120)
     }
 }
 
 struct ShellInputToolbar: View {
+    @ObservedObject var commandStore: ShellCommandStore
+    @ObservedObject var workspaceStore: ShellWorkspaceStore
     @ObservedObject var runner: CommandRunner
+    @State private var isShowingCommandSuggestions = false
+    @State private var isShowingToolkitPicker = false
+
+    private var suggestedCommands: [ShellCommandItem] {
+        Array(commandStore.filteredCommands(
+            in: commandStore.selectedToolkit.name,
+            matching: runner.input
+        ).prefix(24))
+    }
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "dollarsign.square")
-                .foregroundStyle(.white.opacity(0.54))
-                .frame(width: 16)
+            ShellToolkitPicker(
+                commandStore: commandStore,
+                isShowingToolkitPicker: $isShowingToolkitPicker
+            ) {
+                updateSuggestionVisibility(for: runner.input)
+            }
+
+            Text("$")
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.52))
+                .frame(width: 18, alignment: .leading)
 
             TextField("Shell command", text: $runner.input)
                 .textFieldStyle(.plain)
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(.white.opacity(0.9))
+                .onChange(of: runner.input) { _, nextInput in
+                    updateSuggestionVisibility(for: nextInput)
+                }
                 .onSubmit {
-                    runner.run()
+                    runner.run(clearsInputOnRun: true)
+                    isShowingCommandSuggestions = false
                 }
 
             Button {
-                runner.run()
+                runScript()
+                isShowingCommandSuggestions = false
             } label: {
                 Image(systemName: "play.fill")
                     .frame(width: 26, height: 24)
             }
             .buttonStyle(MarkdownToolbarButtonStyle())
             .disabled(runner.isRunning)
-            .help("Run")
+            .help("Run Shell script")
+
+            Button {
+                runner.run(clearsInputOnRun: true)
+                isShowingCommandSuggestions = false
+            } label: {
+                Image(systemName: "arrow.turn.down.left")
+                    .frame(width: 26, height: 24)
+            }
+            .buttonStyle(MarkdownToolbarButtonStyle())
+            .disabled(runner.isRunning)
+            .help("Run Shell input")
 
             Button {
                 runner.stop()
@@ -1226,6 +1493,93 @@ struct ShellInputToolbar: View {
             .help("Stop")
         }
         .padding(.horizontal, 10)
+        .popover(isPresented: $isShowingCommandSuggestions, arrowEdge: .top) {
+            ShellSearchResultsPopover(
+                commands: suggestedCommands,
+                activeCommand: runner.input,
+                isRunning: runner.isRunning
+            ) { item in
+                runner.input = item.command
+                runner.run(item.command, clearsInputOnRun: true)
+                isShowingCommandSuggestions = false
+            }
+        }
+    }
+
+    private func runScript() {
+        let workspace = workspaceStore.activeWorkspace
+        workspaceStore.updateScriptText(workspaceStore.scriptText)
+        runner.run(
+            "/bin/zsh \(workspace.scriptURL.path.shellEscaped)",
+            displayCommand: workspace.scriptURL.lastPathComponent,
+            displayPrompt: "$ file>"
+        )
+    }
+
+    private func updateSuggestionVisibility(for input: String) {
+        let trimmedInput = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        isShowingCommandSuggestions = !trimmedInput.isEmpty && !suggestedCommands.isEmpty && !runner.isRunning
+    }
+}
+
+struct ShellToolkitPicker: View {
+    @ObservedObject var commandStore: ShellCommandStore
+    @Binding var isShowingToolkitPicker: Bool
+    let onSelect: () -> Void
+
+    var body: some View {
+        Button {
+            isShowingToolkitPicker.toggle()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: commandStore.selectedToolkit.systemImage)
+                    .frame(width: 15)
+
+                Text(commandStore.selectedToolkit.name)
+                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    .lineLimit(1)
+
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.38))
+            }
+            .foregroundStyle(.white.opacity(0.78))
+            .frame(width: 118, height: 24, alignment: .leading)
+            .padding(.horizontal, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(FilePillButtonStyle(isSelected: isShowingToolkitPicker))
+        .help("Shell toolkit")
+        .popover(isPresented: $isShowingToolkitPicker, arrowEdge: .top) {
+            SearchResultsContainer {
+                ForEach(commandStore.toolkits) { toolkit in
+                    Button {
+                        commandStore.selectToolkit(toolkit.name)
+                        isShowingToolkitPicker = false
+                        onSelect()
+                    } label: {
+                        SearchResultRow(
+                            systemImage: toolkit.systemImage,
+                            title: toolkit.name,
+                            detail: "Benshell command toolkit"
+                        )
+                    }
+                    .buttonStyle(FilePillButtonStyle(isSelected: toolkit.name == commandStore.selectedToolkit.name))
+                }
+
+                Button {
+                    commandStore.refresh()
+                    onSelect()
+                } label: {
+                    SearchResultRow(
+                        systemImage: "arrow.clockwise",
+                        title: "Refresh",
+                        detail: "Reload Benshell commands"
+                    )
+                }
+                .buttonStyle(FilePillButtonStyle(isSelected: false))
+            }
+        }
     }
 }
 
@@ -1293,7 +1647,7 @@ struct ShellCommandCatalogView: View {
                 isRunning: runner.isRunning
             ) { item in
                 runner.input = item.command
-                runner.run(item.command)
+                runner.run(item.command, clearsInputOnRun: true)
                 query = ""
                 isShowingSearchResults = false
             }
@@ -1353,11 +1707,11 @@ struct CommandPane: View {
                     .font(.system(size: 12, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.9))
                     .onSubmit {
-                        runner.run()
+                        runner.run(clearsInputOnRun: true)
                     }
 
                 Button {
-                    runner.run()
+                    runner.run(clearsInputOnRun: true)
                 } label: {
                     Image(systemName: "play.fill")
                         .frame(width: 24, height: 22)
@@ -1401,6 +1755,7 @@ struct CommandPane: View {
 struct TerminalTasksPane: View {
     @ObservedObject var taskStore: TerminalTaskStore
     let size: CGSize
+    let onJumpToManagedTask: (TerminalTask) -> Void
 
     private let toolbarHeight: CGFloat = 34
     private let separatorHeight: CGFloat = 1
@@ -1443,7 +1798,10 @@ struct TerminalTasksPane: View {
                 .fill(.white.opacity(0.045))
                 .frame(width: size.width, height: separatorHeight)
 
-            TerminalInputToolbar(taskStore: taskStore)
+            TerminalInputToolbar(
+                taskStore: taskStore,
+                onJumpToManagedTask: onJumpToManagedTask
+            )
                 .frame(width: size.width, height: toolbarHeight)
                 .background(Color(red: 0.055, green: 0.055, blue: 0.065))
         }
@@ -1531,6 +1889,7 @@ struct TerminalTaskLiveDetailView: View {
 
 struct TerminalInputToolbar: View {
     @ObservedObject var taskStore: TerminalTaskStore
+    let onJumpToManagedTask: (TerminalTask) -> Void
 
     var body: some View {
         HStack(spacing: 8) {
@@ -1547,14 +1906,18 @@ struct TerminalInputToolbar: View {
                 }
 
             Button {
-                taskStore.focusSelectedTerminal()
+                if let task = taskStore.selectedTask, task.isNotchwowManaged {
+                    onJumpToManagedTask(task)
+                } else {
+                    taskStore.focusSelectedTerminal()
+                }
             } label: {
                 Image(systemName: "arrow.up.forward.app")
                     .frame(width: 26, height: 24)
             }
             .buttonStyle(MarkdownToolbarButtonStyle())
             .disabled(taskStore.selectedTask == nil || taskStore.isTerminalBridgeBusy)
-            .help("Focus Terminal tab")
+            .help(taskStore.selectedTask?.isNotchwowManaged == true ? "Jump to notchwow pane" : "Focus Terminal tab")
 
             Button {
                 taskStore.runTerminalInput()
@@ -1626,6 +1989,11 @@ struct TerminalTaskRow: View {
 
 extension TerminalTask {
     var systemImage: String {
+        if isNotchwowManaged {
+            return title.localizedCaseInsensitiveContains("python")
+                ? "chevron.left.forwardslash.chevron.right"
+                : "dollarsign.square"
+        }
         if isZombieOnly {
             return "exclamationmark.triangle"
         }
@@ -1792,8 +2160,95 @@ struct OutputView: View {
     }
 }
 
+struct MarkdownAIReviewView: View {
+    @ObservedObject var aiStore: MarkdownAIEditStore
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: aiStore.proposal == nil ? "sparkles" : "doc.text.magnifyingglass")
+                    .foregroundStyle(.white.opacity(0.58))
+                    .frame(width: 16)
+
+                Text(aiStore.statusText)
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.72))
+                    .lineLimit(1)
+
+                Spacer(minLength: 0)
+
+                if aiStore.isRunning {
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.58)
+                        .frame(width: 18, height: 18)
+                }
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 28)
+            .background(Color(red: 0.04, green: 0.042, blue: 0.05))
+
+            if let proposal = aiStore.proposal {
+                HStack(spacing: 0) {
+                    MarkdownAIComparisonColumn(
+                        title: proposal.isInsertion ? "Before cursor" : "Before",
+                        text: proposal.isInsertion ? "Insert at UTF-16 \(proposal.range.location)" : proposal.originalText
+                    )
+
+                    Rectangle()
+                        .fill(.white.opacity(0.045))
+                        .frame(width: 1)
+
+                    MarkdownAIComparisonColumn(
+                        title: proposal.isInsertion ? "Insert" : "After",
+                        text: proposal.replacementText
+                    )
+                }
+            } else {
+                ScrollView {
+                    Text(aiStore.statusText)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(.white.opacity(0.56))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                        .padding(10)
+                }
+            }
+        }
+        .background(Color(red: 0.035, green: 0.037, blue: 0.044))
+    }
+}
+
+struct MarkdownAIComparisonColumn: View {
+    let title: String
+    let text: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.42))
+                .lineLimit(1)
+
+            ScrollView {
+                Text(text.isEmpty ? " " : text)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.76))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(10)
+    }
+}
+
 struct MarkdownShortcutToolbar: View {
     let editorInteractionState: EditorInteractionState
+    @ObservedObject var aiStore: MarkdownAIEditStore
+    let onSubmitAI: () -> Void
+    let onAcceptAI: () -> Void
+    let onRejectAI: () -> Void
 
     var body: some View {
         HStack(spacing: 4) {
@@ -1810,6 +2265,57 @@ struct MarkdownShortcutToolbar: View {
             }
 
             Spacer(minLength: 0)
+
+            if aiStore.proposal != nil {
+                Button(action: onAcceptAI) {
+                    Image(systemName: "checkmark")
+                        .frame(width: 26, height: 24)
+                }
+                .buttonStyle(MarkdownToolbarButtonStyle())
+                .disabled(aiStore.isRunning)
+                .help("Apply AI edit")
+
+                Button(action: onRejectAI) {
+                    Image(systemName: "xmark")
+                        .frame(width: 26, height: 24)
+                }
+                .buttonStyle(MarkdownToolbarButtonStyle())
+                .disabled(aiStore.isRunning)
+                .help("Reject AI edit")
+            }
+
+            HStack(spacing: 6) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.46))
+                    .frame(width: 14)
+
+                TextField("Ask AI", text: $aiStore.input)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.86))
+                    .disabled(aiStore.isRunning)
+                    .onSubmit {
+                        if aiStore.canSubmit {
+                            onSubmitAI()
+                        }
+                    }
+
+                Button(action: onSubmitAI) {
+                    Image(systemName: "arrow.up")
+                        .frame(width: 24, height: 22)
+                }
+                .buttonStyle(MarkdownToolbarButtonStyle())
+                .disabled(!aiStore.canSubmit)
+                .help("Ask AI to edit the cursor or selection")
+            }
+            .padding(.leading, 8)
+            .padding(.trailing, 4)
+            .frame(width: 282, height: 26)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(.white.opacity(0.045))
+            )
         }
         .padding(.horizontal, 10)
     }

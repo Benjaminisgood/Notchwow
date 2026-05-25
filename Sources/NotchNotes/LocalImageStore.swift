@@ -14,20 +14,42 @@ final class LocalImageStore: EmbeddedImageFileProvider, @unchecked Sendable {
         var createdAt: Date
     }
 
-    private let markdownRootURL: URL
-    private let directoryURL: URL
-    private let manifestURL: URL
+    private var markdownRootURL: URL
+    private var directoryURL: URL
+    private var manifestURL: URL
     private let lock = NSLock()
     private var records: [String: ImageAssetRecord]
     private var version = 0
 
-    init() {
+    init(markdownRootURL: URL = WorkspacePaths.markdownRoot) {
         WorkspacePaths.ensureDirectories()
-        markdownRootURL = WorkspacePaths.markdownRoot
-        directoryURL = WorkspacePaths.markdownAttachments
-        try? FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
-        manifestURL = directoryURL.appendingPathComponent("manifest.json")
+        let paths = Self.paths(for: markdownRootURL)
+        self.markdownRootURL = paths.markdownRoot
+        directoryURL = paths.attachments
+        try? FileManager.default.createDirectory(at: paths.attachments, withIntermediateDirectories: true)
+        manifestURL = paths.manifest
         records = Self.loadRecords(from: manifestURL)
+    }
+
+    func useMarkdownRoot(_ root: URL) {
+        let paths = Self.paths(for: root)
+
+        lock.lock()
+        let isSameRoot = markdownRootURL.standardizedFileURL.path == paths.markdownRoot.standardizedFileURL.path
+        lock.unlock()
+
+        guard !isSameRoot else { return }
+
+        try? FileManager.default.createDirectory(at: paths.attachments, withIntermediateDirectories: true)
+        let nextRecords = Self.loadRecords(from: paths.manifest)
+
+        lock.lock()
+        markdownRootURL = paths.markdownRoot
+        directoryURL = paths.attachments
+        manifestURL = paths.manifest
+        records = nextRecords
+        version += 1
+        lock.unlock()
     }
 
     func saveImage(from pasteboard: NSPasteboard) -> String? {
@@ -98,6 +120,12 @@ final class LocalImageStore: EmbeddedImageFileProvider, @unchecked Sendable {
         return version
     }
 
+    private func currentPaths() -> (markdownRoot: URL, attachments: URL, manifest: URL) {
+        lock.lock()
+        defer { lock.unlock() }
+        return (markdownRootURL, directoryURL, manifestURL)
+    }
+
     private func saveFileAttachment(from fileURL: URL) -> String? {
         guard fileURL.isFileURL else { return nil }
 
@@ -141,11 +169,12 @@ final class LocalImageStore: EmbeddedImageFileProvider, @unchecked Sendable {
         originalFileURL: URL?,
         sourceKind: String
     ) -> String? {
+        let paths = currentPaths()
         let displayName = sanitizedDisplayName(originalName)
         let url = WorkspacePaths.uniquedFileURL(
             stem: displayName,
             fileExtension: preferredExtension,
-            in: directoryURL
+            in: paths.attachments
         )
         let relativePath = relativeAttachmentPath(forStoredFilename: url.lastPathComponent)
 
@@ -173,10 +202,11 @@ final class LocalImageStore: EmbeddedImageFileProvider, @unchecked Sendable {
 
         lock.lock()
         let record = records[reference]
+        let paths = (markdownRoot: markdownRootURL, attachments: directoryURL)
         lock.unlock()
 
         if let record {
-            return directoryURL.appendingPathComponent(record.storedFilename)
+            return paths.attachments.appendingPathComponent(record.storedFilename)
         }
 
         if reference.hasPrefix("/") {
@@ -184,25 +214,26 @@ final class LocalImageStore: EmbeddedImageFileProvider, @unchecked Sendable {
         }
 
         if reference.hasPrefix("attachments/") {
-            return markdownRootURL.appendingPathComponent(reference, isDirectory: false)
+            return paths.markdownRoot.appendingPathComponent(reference, isDirectory: false)
         }
 
         if !URL(fileURLWithPath: reference).pathExtension.isEmpty {
-            let markdownRelativeURL = markdownRootURL.appendingPathComponent(reference, isDirectory: false)
+            let markdownRelativeURL = paths.markdownRoot.appendingPathComponent(reference, isDirectory: false)
             if FileManager.default.fileExists(atPath: markdownRelativeURL.path) {
                 return markdownRelativeURL
             }
-            return directoryURL.appendingPathComponent(reference, isDirectory: false)
+            return paths.attachments.appendingPathComponent(reference, isDirectory: false)
         }
 
-        return directoryURL.appendingPathComponent("\(reference).png")
+        return paths.attachments.appendingPathComponent("\(reference).png")
     }
 
     private func copyFileAttachment(from fileURL: URL, displayName: String, fileExtension: String) -> URL? {
+        let paths = currentPaths()
         let targetURL = WorkspacePaths.uniquedFileURL(
             stem: displayName,
             fileExtension: fileExtension,
-            in: directoryURL
+            in: paths.attachments
         )
 
         do {
@@ -233,9 +264,10 @@ final class LocalImageStore: EmbeddedImageFileProvider, @unchecked Sendable {
         lock.lock()
         records[relativePath] = record
         let recordsToSave = records
+        let manifest = manifestURL
         version += 1
         lock.unlock()
-        saveRecords(recordsToSave)
+        saveRecords(recordsToSave, to: manifest)
     }
 
     private func markdownReference(displayName: String, relativePath: String, isImage: Bool) -> String {
@@ -258,7 +290,8 @@ final class LocalImageStore: EmbeddedImageFileProvider, @unchecked Sendable {
     }
 
     private func isAlreadyInAttachmentDirectory(_ url: URL) -> Bool {
-        url.standardizedFileURL.path.hasPrefix(directoryURL.standardizedFileURL.path + "/")
+        let paths = currentPaths()
+        return url.standardizedFileURL.path.hasPrefix(paths.attachments.standardizedFileURL.path + "/")
     }
 
     private func relativeAttachmentPath(forStoredFilename filename: String) -> String {
@@ -281,9 +314,16 @@ final class LocalImageStore: EmbeddedImageFileProvider, @unchecked Sendable {
         })
     }
 
-    private func saveRecords(_ records: [String: ImageAssetRecord]) {
+    private func saveRecords(_ records: [String: ImageAssetRecord], to manifest: URL) {
         let sortedRecords = records.values.sorted { $0.createdAt < $1.createdAt }
         guard let data = try? JSONEncoder().encode(sortedRecords) else { return }
-        try? data.write(to: manifestURL, options: .atomic)
+        try? data.write(to: manifest, options: .atomic)
+    }
+
+    private static func paths(for markdownRootURL: URL) -> (markdownRoot: URL, attachments: URL, manifest: URL) {
+        let markdownRoot = markdownRootURL.standardizedFileURL
+        let attachments = markdownRoot.appendingPathComponent("attachments", isDirectory: true)
+        let manifest = attachments.appendingPathComponent("manifest.json", isDirectory: false)
+        return (markdownRoot, attachments, manifest)
     }
 }

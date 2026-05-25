@@ -12,11 +12,12 @@ final class CommandRunner: ObservableObject, @unchecked Sendable {
     @Published private(set) var output: String
     @Published private(set) var isRunning = false
 
-    private let workingDirectory: URL
+    private var workingDirectory: URL
     private let shellBootstrapURL: URL?
     private let environment: [String: String]
-    private let inputPersistenceURL: URL?
-    private let outputPersistenceURL: URL?
+    private var inputPersistenceURL: URL?
+    private var outputPersistenceURL: URL?
+    private let showsCommandTimestamps: Bool
     private var process: Process?
     private var outputPipe: Pipe?
     private var showsSuccessfulExit = true
@@ -30,13 +31,15 @@ final class CommandRunner: ObservableObject, @unchecked Sendable {
         shellBootstrapURL: URL? = nil,
         environment: [String: String] = [:],
         inputPersistenceURL: URL? = nil,
-        outputPersistenceURL: URL? = nil
+        outputPersistenceURL: URL? = nil,
+        showsCommandTimestamps: Bool = false
     ) {
         self.workingDirectory = workingDirectory
         self.shellBootstrapURL = shellBootstrapURL
         self.environment = environment
         self.inputPersistenceURL = inputPersistenceURL
         self.outputPersistenceURL = outputPersistenceURL
+        self.showsCommandTimestamps = showsCommandTimestamps
         self.input = Self.loadText(from: inputPersistenceURL) ?? input
         self.output = Self.loadText(from: outputPersistenceURL) ?? output
         persistInput()
@@ -64,7 +67,8 @@ final class CommandRunner: ObservableObject, @unchecked Sendable {
 
         WorkspacePaths.ensureDirectories()
         let commandForDisplay = displayCommand ?? command
-        appendOutput("\n\(displayPrompt) \(commandForDisplay)\n")
+        let timestamp = showsCommandTimestamps ? "[\(Self.timestampString())] " : ""
+        appendOutput("\n\(timestamp)\(displayPrompt) \(commandForDisplay)\n")
         self.showsSuccessfulExit = showsSuccessfulExit
         self.showsFailedExit = showsFailedExit
         isRunning = true
@@ -155,6 +159,27 @@ final class CommandRunner: ObservableObject, @unchecked Sendable {
         persistOutput()
     }
 
+    func useWorkingDirectory(_ url: URL) {
+        guard !isRunning else { return }
+        workingDirectory = url
+    }
+
+    func usePersistence(
+        inputURL: URL?,
+        outputURL: URL?,
+        defaultInput: String = ""
+    ) {
+        guard !isRunning else { return }
+        guard inputPersistenceURL?.path != inputURL?.path || outputPersistenceURL?.path != outputURL?.path else { return }
+
+        inputPersistenceURL = inputURL
+        outputPersistenceURL = outputURL
+        input = Self.loadText(from: inputURL) ?? defaultInput
+        output = Self.loadText(from: outputURL) ?? ""
+        persistInput()
+        persistOutput()
+    }
+
     private func appendOutput(_ text: String) {
         output += text
 
@@ -242,5 +267,12 @@ final class CommandRunner: ObservableObject, @unchecked Sendable {
             withIntermediateDirectories: true
         )
         try? text.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    private nonisolated static func timestampString() -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return formatter.string(from: Date())
     }
 }

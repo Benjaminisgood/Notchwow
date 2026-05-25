@@ -29,6 +29,7 @@ struct TerminalTask: Identifiable, Equatable, Sendable {
     let detail: String
     let command: String
     let processes: [TerminalProcessInfo]
+    let isNotchwowManaged: Bool
 
     var processCount: Int {
         processes.count
@@ -142,9 +143,9 @@ final class TerminalTaskStore: ObservableObject {
         TerminalAppBridge.openTerminal()
     }
 
-    func openNewTerminalWindow() {
+    func openNewTerminalWindow(workingDirectory: String = WorkspacePaths.shellRoot.path) {
         runTerminalBridgeOperation {
-            TerminalAppBridge.openNewWindow(workingDirectory: WorkspacePaths.root.path)
+            TerminalAppBridge.openNewWindow(workingDirectory: workingDirectory)
         } completion: { [weak self] result in
             switch result {
             case .success:
@@ -160,6 +161,11 @@ final class TerminalTaskStore: ObservableObject {
     func focusSelectedTerminal() {
         guard let selectedTask else {
             TerminalAppBridge.openTerminal()
+            return
+        }
+
+        guard !selectedTask.isNotchwowManaged else {
+            terminalBridgeMessage = "This process is managed by notchwow. Use the jump button to return to its Shell/Py pane."
             return
         }
 
@@ -317,15 +323,19 @@ final class TerminalTaskStore: ObservableObject {
         guard process.terminationStatus == 0 else { return [] }
 
         let output = String(data: data, encoding: .utf8) ?? ""
-        let processes = output
+        let allProcesses = output
             .components(separatedBy: .newlines)
             .compactMap(parseProcessLine)
-            .filter { $0.tty != "??" }
+        let parentByPID = Dictionary(uniqueKeysWithValues: allProcesses.map { ($0.pid, $0.parentPID) })
+        let currentPID = getpid()
+        let processes = allProcesses.filter { process in
+            process.tty != "??" || isDescendant(process.pid, of: currentPID, parentByPID: parentByPID)
+        }
 
         let grouped = Dictionary(grouping: processes, by: \.processGroupID)
 
         return grouped.values
-            .compactMap(makeTask)
+            .compactMap { makeTask(from: $0, currentPID: currentPID, parentByPID: parentByPID) }
             .sorted { lhs, rhs in
                 if lhs.tty == rhs.tty {
                     return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
@@ -360,7 +370,11 @@ final class TerminalTaskStore: ObservableObject {
         )
     }
 
-    private nonisolated static func makeTask(from processes: [TerminalProcessInfo]) -> TerminalTask? {
+    private nonisolated static func makeTask(
+        from processes: [TerminalProcessInfo],
+        currentPID: Int32,
+        parentByPID: [Int32: Int32]
+    ) -> TerminalTask? {
         guard !processes.isEmpty else { return nil }
 
         let sortedProcesses = processes.sorted { lhs, rhs in
@@ -374,13 +388,17 @@ final class TerminalTaskStore: ObservableObject {
             !isWrapperCommand(process.command) && !process.state.contains("Z")
         } ?? leader
 
-        let title = shortCommand(representative.command)
-        let detail = "\(leader.tty)  pgid \(leader.processGroupID)  \(sortedProcesses.count) proc"
+        let isManaged = sortedProcesses.contains { process in
+            process.tty == "??" && isDescendant(process.pid, of: currentPID, parentByPID: parentByPID)
+        }
+        let tty = isManaged && leader.tty == "??" ? "notchwow" : leader.tty
+        let title = managedTitle(for: representative.command) ?? shortCommand(representative.command)
+        let detail = "\(tty)  pgid \(leader.processGroupID)  \(sortedProcesses.count) proc"
 
         return TerminalTask(
             id: leader.processGroupID,
             processGroupID: leader.processGroupID,
-            tty: leader.tty,
+            tty: tty,
             leaderPID: leader.pid,
             representativePID: representative.pid,
             elapsed: representative.elapsed,
@@ -388,8 +406,36 @@ final class TerminalTaskStore: ObservableObject {
             title: title,
             detail: detail,
             command: representative.command,
-            processes: sortedProcesses
+            processes: sortedProcesses,
+            isNotchwowManaged: isManaged
         )
+    }
+
+    private nonisolated static func isDescendant(
+        _ pid: Int32,
+        of ancestorPID: Int32,
+        parentByPID: [Int32: Int32]
+    ) -> Bool {
+        var currentPID = pid
+        var visited = Set<Int32>()
+
+        while let parentPID = parentByPID[currentPID], parentPID > 0 {
+            if parentPID == ancestorPID {
+                return true
+            }
+            guard !visited.contains(parentPID) else { return false }
+            visited.insert(parentPID)
+            currentPID = parentPID
+        }
+
+        return false
+    }
+
+    private nonisolated static func managedTitle(for command: String) -> String? {
+        if command.contains("__NOTCHWOW_REPL__") || command.contains("InteractiveConsole") {
+            return "notchwow Python REPL"
+        }
+        return nil
     }
 
     private nonisolated static func isWrapperCommand(_ command: String) -> Bool {

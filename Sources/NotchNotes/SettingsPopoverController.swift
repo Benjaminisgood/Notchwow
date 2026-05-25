@@ -10,16 +10,19 @@ final class SettingsPopoverPanel: NSPanel {
 @MainActor
 final class SettingsPopoverController: NSObject, NSWindowDelegate {
     private let settingsStore: AppSettingsStore
-    private let condaStore: CondaEnvironmentStore
+    private let directoryStore: WorkspaceDirectoryStore
     private var panel: SettingsPopoverPanel?
     private var localOutsideClickMonitor: Any?
     private var globalOutsideClickMonitor: Any?
     private var suppressShowUntil: Date?
-    private let contentSize = NSSize(width: 320, height: 226)
+    private let contentSize = NSSize(width: 400, height: 408)
 
-    init(settingsStore: AppSettingsStore, condaStore: CondaEnvironmentStore) {
+    init(
+        settingsStore: AppSettingsStore,
+        directoryStore: WorkspaceDirectoryStore
+    ) {
         self.settingsStore = settingsStore
-        self.condaStore = condaStore
+        self.directoryStore = directoryStore
         super.init()
     }
 
@@ -52,7 +55,10 @@ final class SettingsPopoverController: NSObject, NSWindowDelegate {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         panel.delegate = self
 
-        let view = SettingsPopoverView(settingsStore: settingsStore, condaStore: condaStore)
+        let view = SettingsPopoverView(
+            settingsStore: settingsStore,
+            directoryStore: directoryStore
+        )
         let host = FirstMouseHostingView(rootView: view)
         host.frame = NSRect(origin: .zero, size: contentSize)
         host.wantsLayer = true
@@ -186,7 +192,7 @@ final class SettingsPopoverController: NSObject, NSWindowDelegate {
 
 struct SettingsPopoverView: View {
     @ObservedObject var settingsStore: AppSettingsStore
-    @ObservedObject var condaStore: CondaEnvironmentStore
+    @ObservedObject var directoryStore: WorkspaceDirectoryStore
     @State private var appeared = false
 
     var body: some View {
@@ -226,45 +232,51 @@ struct SettingsPopoverView: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("Python")
+                Text("Working Directories")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.50))
 
-                HStack(spacing: 8) {
-                    EnvironmentPicker(condaStore: condaStore)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                DirectorySettingRow(
+                    title: "md cwd",
+                    path: $directoryStore.markdownWorkingDirectory,
+                    openAction: directoryStore.openMarkdownWorkingDirectory
+                )
 
-                    Button {
-                        condaStore.refresh()
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                            .frame(width: 28, height: 26)
-                    }
-                    .buttonStyle(MarkdownToolbarButtonStyle())
-                    .disabled(condaStore.isRefreshing)
-                    .help("Refresh conda environments")
+                DirectorySettingRow(
+                    title: "sh cwd",
+                    path: $directoryStore.shellWorkingDirectory,
+                    openAction: directoryStore.openShellWorkingDirectory
+                )
 
-                    Button {
-                        if let url = condaStore.selectedEnvironment?.url {
-                            NSWorkspace.shared.open(url)
-                        }
-                    } label: {
-                        Image(systemName: "folder")
-                            .frame(width: 28, height: 26)
-                    }
-                    .buttonStyle(MarkdownToolbarButtonStyle())
-                    .disabled(condaStore.selectedEnvironment == nil)
-                    .help("Open environment folder")
-                }
+                DirectorySettingRow(
+                    title: "py cwd",
+                    path: $directoryStore.pythonProjectDirectory,
+                    openAction: directoryStore.openPythonProjectDirectory
+                )
+            }
 
-                Text(condaStore.selectedEnvironment?.path ?? condaStore.condaExecutablePath)
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.42))
-                    .lineLimit(1)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("AI")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.50))
+
+                AISettingRow(
+                    title: "key",
+                    text: $settingsStore.bailianAPIKey,
+                    placeholder: "sk-...",
+                    isSecure: true
+                )
+
+                AISettingRow(
+                    title: "model",
+                    text: $settingsStore.bailianModel,
+                    placeholder: "qwen3-coder-plus",
+                    isSecure: false
+                )
             }
         }
         .padding(14)
-        .frame(width: 320, height: 226)
+        .frame(width: 400, height: 408)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(Color(red: 0.045, green: 0.045, blue: 0.052).opacity(0.98))
@@ -275,6 +287,74 @@ struct SettingsPopoverView: View {
         .animation(.spring(response: 0.22, dampingFraction: 0.86), value: appeared)
         .onAppear {
             appeared = true
+        }
+    }
+}
+
+struct AISettingRow: View {
+    let title: String
+    @Binding var text: String
+    let placeholder: String
+    let isSecure: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.48))
+                .frame(width: 48, alignment: .leading)
+
+            Group {
+                if isSecure {
+                    SecureField(placeholder, text: $text)
+                } else {
+                    TextField(placeholder, text: $text)
+                }
+            }
+            .textFieldStyle(.plain)
+            .font(.system(size: 10, design: .monospaced))
+            .foregroundStyle(.white.opacity(0.82))
+            .lineLimit(1)
+            .padding(.horizontal, 8)
+            .frame(height: 26)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(.white.opacity(0.055))
+            )
+        }
+    }
+}
+
+struct DirectorySettingRow: View {
+    let title: String
+    @Binding var path: String
+    let openAction: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.48))
+                .frame(width: 48, alignment: .leading)
+
+            TextField("directory", text: $path)
+                .textFieldStyle(.plain)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.82))
+                .lineLimit(1)
+                .padding(.horizontal, 8)
+                .frame(height: 26)
+                .background(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(.white.opacity(0.055))
+                )
+
+            Button(action: openAction) {
+                Image(systemName: "folder")
+                    .frame(width: 26, height: 24)
+            }
+            .buttonStyle(MarkdownToolbarButtonStyle())
+            .help("Open directory")
         }
     }
 }

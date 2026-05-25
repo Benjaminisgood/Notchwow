@@ -53,19 +53,20 @@ final class NoteStore: ObservableObject {
 
     private static let legacyTextKey = "notchNotes.text"
     private static let activeFilePathKey = "notchNotes.activeFilePath"
-    private let markdownRoot = WorkspacePaths.markdownRoot
+    private var markdownRoot: URL
     private var syncTimer: Timer?
     private var isWritingToDisk = false
 
-    init() {
+    init(markdownRoot: URL = WorkspacePaths.markdownRoot) {
         WorkspacePaths.ensureDirectories()
+        self.markdownRoot = markdownRoot.standardizedFileURL
 
-        var initialTabs = Self.loadMarkdownTabs(from: markdownRoot)
+        var initialTabs = Self.loadMarkdownTabs(from: self.markdownRoot)
         if initialTabs.isEmpty {
             let legacyText = UserDefaults.standard.string(forKey: Self.legacyTextKey)
             let seededText = legacyText?.isEmpty == false ? legacyText! : "# Untitled\n\n"
             let tab = NoteTab(text: seededText)
-            initialTabs = [Self.persistNewTab(tab, in: markdownRoot)]
+            initialTabs = [Self.persistNewTab(tab, in: self.markdownRoot)]
         }
 
         tabs = initialTabs
@@ -132,6 +133,19 @@ final class NoteStore: ObservableObject {
         save()
     }
 
+    func useMarkdownRoot(_ root: URL) {
+        let nextRoot = root.standardizedFileURL
+        guard markdownRoot.standardizedFileURL.path != nextRoot.path else { return }
+
+        if !tabs.isEmpty {
+            persistActiveTabToDisk(allowRename: false)
+        }
+
+        markdownRoot = nextRoot
+        searchQuery = ""
+        reloadFromMarkdownRoot(seedLegacyText: false)
+    }
+
     func updateSelection(for id: UUID, range: NSRange) {
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
         let clamped = clampedRange(range, text: tabs[index].text)
@@ -193,6 +207,28 @@ final class NoteStore: ObservableObject {
 
     private var activeIndex: Int {
         tabs.firstIndex { $0.id == activeTabID } ?? 0
+    }
+
+    private func reloadFromMarkdownRoot(seedLegacyText: Bool) {
+        var loadedTabs = Self.loadMarkdownTabs(from: markdownRoot)
+        if loadedTabs.isEmpty {
+            let seededText: String
+            if seedLegacyText,
+               let legacyText = UserDefaults.standard.string(forKey: Self.legacyTextKey),
+               !legacyText.isEmpty {
+                seededText = legacyText
+            } else {
+                seededText = "# Untitled\n\n"
+            }
+            loadedTabs = [Self.persistNewTab(NoteTab(text: seededText), in: markdownRoot)]
+        }
+
+        tabs = loadedTabs
+        let activePath = UserDefaults.standard.string(forKey: Self.activeFilePathKey)
+        activeTabID = activePath.flatMap { path in
+            loadedTabs.first(where: { $0.filePath == path })?.id
+        } ?? loadedTabs[0].id
+        save()
     }
 
     private func persistActiveTabToDisk(allowRename: Bool) {

@@ -10,12 +10,24 @@ enum WorkspacePaths {
     static let markdownAttachments = markdownRoot.appendingPathComponent("attachments", isDirectory: true)
     static let pythonRoot = root.appendingPathComponent("pys", isDirectory: true)
     static let shellRoot = root.appendingPathComponent("shs", isDirectory: true)
+    static let shellWorkspaceRoot = shellRoot.appendingPathComponent("workspaces", isDirectory: true)
+    static let shellWorkspaceInputRoot = shellRoot.appendingPathComponent("workspace-inputs", isDirectory: true)
+    static let shellWorkspaceScriptRoot = shellRoot.appendingPathComponent("workspace-scripts", isDirectory: true)
     static let shellInputFile = shellRoot.appendingPathComponent("last-command.txt", isDirectory: false)
     static let shellOutputFile = shellRoot.appendingPathComponent("transcript.txt", isDirectory: false)
 
     static func ensureDirectories() {
         let manager = FileManager.default
-        [root, markdownRoot, markdownAttachments, pythonRoot, shellRoot].forEach { url in
+        [
+            root,
+            markdownRoot,
+            markdownAttachments,
+            pythonRoot,
+            shellRoot,
+            shellWorkspaceRoot,
+            shellWorkspaceInputRoot,
+            shellWorkspaceScriptRoot
+        ].forEach { url in
             try? manager.createDirectory(at: url, withIntermediateDirectories: true)
         }
     }
