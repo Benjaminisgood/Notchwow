@@ -4,7 +4,6 @@ import SwiftUI
 @MainActor
 final class NotchPanel: NSPanel {
     var onMouseEvent: ((NSEvent) -> Void)?
-    var onScrollEvent: ((NSEvent) -> Void)?
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
@@ -12,10 +11,6 @@ final class NotchPanel: NSPanel {
     override func sendEvent(_ event: NSEvent) {
         if event.type == .leftMouseDown || event.type == .leftMouseDragged || event.type == .leftMouseUp {
             onMouseEvent?(event)
-        }
-
-        if event.type == .scrollWheel {
-            onScrollEvent?(event)
         }
 
         super.sendEvent(event)
@@ -80,7 +75,6 @@ final class NotchPanelController: NSObject {
     private var isExpanded = false
     private var activeMenuTrackingCount = 0
     private var collapseTask: DispatchWorkItem?
-    private var lastHorizontalSwipeAt = Date.distantPast
 
     override init() {
         hotPanel = NotchPanel(
@@ -333,10 +327,6 @@ final class NotchPanelController: NSObject {
             guard let self else { return }
             self.editorInteractionState.handleMouseEvent(event, searchingIn: self.hostingView)
         }
-
-        drawerPanel.onScrollEvent = { [weak self] event in
-            self?.handleScrollEvent(event)
-        }
     }
 
     private func observeGlobalSelectionMouseEvents() {
@@ -458,26 +448,6 @@ final class NotchPanelController: NSObject {
     private func openSettingsPopover() {
         cancelCollapse()
         settingsPopoverController.show(relativeTo: drawerPanel)
-    }
-
-    private func handleScrollEvent(_ event: NSEvent) {
-        guard isExpanded else { return }
-
-        let deltaX = event.scrollingDeltaX
-        let deltaY = event.scrollingDeltaY
-        guard abs(deltaX) > 18, abs(deltaX) > abs(deltaY) * 1.35 else { return }
-
-        let now = Date()
-        guard now.timeIntervalSince(lastHorizontalSwipeAt) > 0.32 else { return }
-        lastHorizontalSwipeAt = now
-
-        withAnimation(.easeOut(duration: 0.16)) {
-            if deltaX > 0 {
-                workbenchState.selectNext()
-            } else {
-                workbenchState.selectPrevious()
-            }
-        }
     }
 
     private func currentLayout() -> NotchLayout {
