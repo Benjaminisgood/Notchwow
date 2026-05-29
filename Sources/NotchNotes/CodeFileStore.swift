@@ -124,8 +124,44 @@ final class CodeFileStore: ObservableObject {
         defer { isWritingToDisk = false }
 
         guard files.indices.contains(activeIndex) else { return }
-        let file = files[activeIndex]
+        var file = files[activeIndex]
+
+        // Auto-rename based on first comment title (skip shebang)
+        if let title = Self.firstCommentTitle(in: file.text) {
+            let desiredURL = WorkspacePaths.uniquedFileURL(
+                stem: title,
+                fileExtension: fileExtension,
+                in: rootURL,
+                excluding: file.fileURL
+            )
+            if desiredURL.standardizedFileURL.path != file.fileURL.standardizedFileURL.path,
+               FileManager.default.fileExists(atPath: file.filePath) {
+                try? FileManager.default.moveItem(at: file.fileURL, to: desiredURL)
+                file.filePath = desiredURL.path
+                files[activeIndex] = file
+            }
+        }
+
         try? file.text.write(to: file.fileURL, atomically: true, encoding: .utf8)
+    }
+
+    /// Extracts a title from the first `# ` comment line, skipping shebang lines.
+    static func firstCommentTitle(in text: String) -> String? {
+        let lines = text.components(separatedBy: .newlines)
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            // Skip empty lines and shebang
+            if trimmed.isEmpty || trimmed.hasPrefix("#!") { continue }
+            // First `# ` comment is the title
+            if trimmed.hasPrefix("# ") {
+                let title = String(trimmed.dropFirst(2))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                return title.isEmpty ? nil : title
+            }
+            // Any other non-comment line means no title
+            return nil
+        }
+        return nil
     }
 
     private func startDiskSync() {
