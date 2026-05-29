@@ -330,12 +330,19 @@ extension MarkdownStyler {
         let hrPattern = "^[ \\t]*-{3,}[ \\t]*$"
         if let hrRegex = try? NSRegularExpression(pattern: hrPattern, options: [.anchorsMatchLines]) {
             for hrMatch in hrRegex.matches(in: ctx.text, range: ctx.fullRange) {
+                // 跳过代码块内的匹配
+                if MarkdownDetection.isInsideCodeBlock(range: hrMatch.range, codeTokens: ctx.codeTokens) { continue }
                 attrs.append((hrMatch.range, [.foregroundColor: NSColor.clear]))
                 attrs.append((hrMatch.range, [
                     .strikethroughStyle: NSUnderlineStyle.thick.rawValue,
                     .strikethroughColor: ctx.configuration.theme.strikethroughColor
                 ]))
                 let rulePara = NSMutableParagraphStyle()
+                rulePara.minimumLineHeight = ctx.baseDefaultLineHeight
+                rulePara.maximumLineHeight = ctx.baseDefaultLineHeight
+                rulePara.lineSpacing = 0
+                rulePara.paragraphSpacing = ctx.baseParagraphSpacing
+                rulePara.paragraphSpacingBefore = 0
                 attrs.append((hrMatch.range, [.paragraphStyle: rulePara]))
             }
         }
