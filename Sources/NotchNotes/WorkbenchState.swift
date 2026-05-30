@@ -5,6 +5,7 @@ enum WorkbenchMode: String, CaseIterable, Identifiable {
     case markdown
     case terminal
     case python
+    case appleScript
     case tasks
 
     var id: String { rawValue }
@@ -14,6 +15,7 @@ enum WorkbenchMode: String, CaseIterable, Identifiable {
         case .markdown: return "MD"
         case .terminal: return "Shell"
         case .python: return "Py"
+        case .appleScript: return "AS"
         case .tasks: return "Term"
         }
     }
@@ -23,6 +25,7 @@ enum WorkbenchMode: String, CaseIterable, Identifiable {
         case .markdown: return "doc.richtext"
         case .terminal: return "dollarsign.square"
         case .python: return "chevron.left.forwardslash.chevron.right"
+        case .appleScript: return "command.square"
         case .tasks: return "terminal.fill"
         }
     }

@@ -23,8 +23,17 @@ final class LaunchdJobStore: ObservableObject {
     @Published private(set) var jobs: [LaunchdJob] = []
     @Published private(set) var loadedLabels: Set<String> = []
     @Published var selectedJobID: String?
-    @Published var editingContent: String = ""
+    @Published var editingContent: String = "" {
+        didSet {
+            // Mark dirty when content changes from user editing (not from refresh)
+            if !isRefreshing {
+                isDirty = true
+            }
+        }
+    }
     @Published var searchQuery: String = ""
+    @Published private(set) var isDirty: Bool = false
+    private var isRefreshing: Bool = false
     @Published private(set) var operationMessage: String = ""
     @Published private(set) var isOperationError: Bool = false
     @Published private(set) var outputLog: String = ""
@@ -69,7 +78,10 @@ final class LaunchdJobStore: ObservableObject {
 
     func select(_ job: LaunchdJob) {
         selectedJobID = job.id
+        isRefreshing = true
         editingContent = job.content
+        isRefreshing = false
+        isDirty = false
     }
 
     func refresh() {
@@ -79,12 +91,17 @@ final class LaunchdJobStore: ObservableObject {
         let scanned = Self.scanPlistFiles(loadedLabels: loaded)
         jobs = scanned
 
+        // Don't overwrite user edits that haven't been saved yet
+        guard !isDirty else { return }
+
+        isRefreshing = true
         if let selectedJobID,
            let updated = scanned.first(where: { $0.id == selectedJobID }) {
             editingContent = updated.content
         } else if let first = scanned.first, selectedJobID == nil {
             editingContent = first.content
         }
+        isRefreshing = false
     }
 
     func saveEditingContent() {
@@ -115,6 +132,7 @@ final class LaunchdJobStore: ObservableObject {
 
             setMessage("Saved \(selectedJobID ?? job.detail)")
             appendLog("Saved \(selectedJobID ?? job.detail)")
+            isDirty = false
             refresh()
         } catch {
             setMessage("Save failed: \(error.localizedDescription)", isError: true)

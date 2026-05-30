@@ -25,14 +25,16 @@ final class CodeFileStore: ObservableObject {
     private let rootURL: URL
     private let fileExtension: String
     private let defaultTemplate: String
+    private let commentPrefix: String
     private let defaultStem = "scratch"
     private var syncTimer: Timer?
     private var isWritingToDisk = false
 
-    init(rootURL: URL, fileExtension: String, defaultTemplate: String) {
+    init(rootURL: URL, fileExtension: String, defaultTemplate: String, commentPrefix: String = "# ") {
         self.rootURL = rootURL
         self.fileExtension = fileExtension
         self.defaultTemplate = defaultTemplate
+        self.commentPrefix = commentPrefix
         try? FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
 
         let loadedFiles = Self.availableFiles(
@@ -119,7 +121,7 @@ final class CodeFileStore: ObservableObject {
         files.firstIndex { $0.id == activeFileID } ?? 0
     }
 
-    private func persistActiveFile() {
+    func persistActiveFile() {
         isWritingToDisk = true
         defer { isWritingToDisk = false }
 
@@ -127,7 +129,7 @@ final class CodeFileStore: ObservableObject {
         var file = files[activeIndex]
 
         // Auto-rename based on first comment title (skip shebang)
-        if let title = Self.firstCommentTitle(in: file.text) {
+        if let title = Self.firstCommentTitle(in: file.text, commentPrefix: commentPrefix) {
             let desiredURL = WorkspacePaths.uniquedFileURL(
                 stem: title,
                 fileExtension: fileExtension,
@@ -145,16 +147,16 @@ final class CodeFileStore: ObservableObject {
         try? file.text.write(to: file.fileURL, atomically: true, encoding: .utf8)
     }
 
-    /// Extracts a title from the first `# ` comment line, skipping shebang lines.
-    static func firstCommentTitle(in text: String) -> String? {
+    /// Extracts a title from the first comment line matching the given prefix, skipping shebang lines.
+    static func firstCommentTitle(in text: String, commentPrefix: String = "# ") -> String? {
         let lines = text.components(separatedBy: .newlines)
         for line in lines {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             // Skip empty lines and shebang
             if trimmed.isEmpty || trimmed.hasPrefix("#!") { continue }
-            // First `# ` comment is the title
-            if trimmed.hasPrefix("# ") {
-                let title = String(trimmed.dropFirst(2))
+            // First comment matching prefix is the title
+            if trimmed.hasPrefix(commentPrefix) {
+                let title = String(trimmed.dropFirst(commentPrefix.count))
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 return title.isEmpty ? nil : title
             }

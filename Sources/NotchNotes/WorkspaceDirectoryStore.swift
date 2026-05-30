@@ -22,6 +22,12 @@ final class WorkspaceDirectoryStore: ObservableObject {
         }
     }
 
+    @Published var appleScriptDirectory: String {
+        didSet {
+            persistAppleScriptDirectory()
+        }
+    }
+
     @Published var launchdDirectory: String {
         didSet {
             persistLaunchdDirectory()
@@ -31,6 +37,7 @@ final class WorkspaceDirectoryStore: ObservableObject {
     private static let markdownWorkingDirectoryKey = "notchNotes.markdownWorkingDirectory"
     private static let shellWorkingDirectoryKey = "notchNotes.shellWorkingDirectory"
     private static let pythonProjectDirectoryKey = "notchNotes.pythonProjectDirectory"
+    private static let appleScriptDirectoryKey = "notchNotes.appleScriptDirectory"
     private static let launchdDirectoryKey = "notchNotes.launchdPath"
 
     init() {
@@ -45,6 +52,8 @@ final class WorkspaceDirectoryStore: ObservableObject {
         }
         pythonProjectDirectory = UserDefaults.standard.string(forKey: Self.pythonProjectDirectoryKey)
             ?? WorkspacePaths.pythonRoot.path
+        appleScriptDirectory = UserDefaults.standard.string(forKey: Self.appleScriptDirectoryKey)
+            ?? WorkspacePaths.appleScriptRoot.path
         launchdDirectory = UserDefaults.standard.string(forKey: Self.launchdDirectoryKey)
             ?? WorkspacePaths.launchdRoot.path
     }
@@ -59,6 +68,10 @@ final class WorkspaceDirectoryStore: ObservableObject {
 
     var pythonProjectDirectoryURL: URL {
         validatedDirectoryURL(pythonProjectDirectory, fallback: WorkspacePaths.pythonRoot)
+    }
+
+    var appleScriptDirectoryURL: URL {
+        validatedDirectoryURL(appleScriptDirectory, fallback: WorkspacePaths.appleScriptRoot)
     }
 
     var launchdDirectoryURL: URL {
@@ -79,6 +92,10 @@ final class WorkspaceDirectoryStore: ObservableObject {
         NSWorkspace.shared.open(pythonProjectDirectoryURL)
     }
 
+    func openAppleScriptDirectory() {
+        NSWorkspace.shared.open(appleScriptDirectoryURL)
+    }
+
     func openLaunchdDirectory() {
         NSWorkspace.shared.open(launchdDirectoryURL)
     }
@@ -97,6 +114,10 @@ final class WorkspaceDirectoryStore: ObservableObject {
         openInVSCode(pythonProjectDirectoryURL)
     }
 
+    func openAppleScriptDirectoryInVSCode() {
+        openInVSCode(appleScriptDirectoryURL)
+    }
+
     func openLaunchdDirectoryInVSCode() {
         openInVSCode(launchdDirectoryURL)
     }
@@ -113,6 +134,10 @@ final class WorkspaceDirectoryStore: ObservableObject {
 
     func openPythonProjectDirectoryInTerminal() {
         openInTerminal(pythonProjectDirectoryURL)
+    }
+
+    func openAppleScriptDirectoryInTerminal() {
+        openInTerminal(appleScriptDirectoryURL)
     }
 
     func openLaunchdDirectoryInTerminal() {
@@ -169,6 +194,10 @@ final class WorkspaceDirectoryStore: ObservableObject {
 
     private func persistPythonProjectDirectory() {
         UserDefaults.standard.set(Self.normalizedPath(pythonProjectDirectory), forKey: Self.pythonProjectDirectoryKey)
+    }
+
+    private func persistAppleScriptDirectory() {
+        UserDefaults.standard.set(Self.normalizedPath(appleScriptDirectory), forKey: Self.appleScriptDirectoryKey)
     }
 
     private func persistLaunchdDirectory() {

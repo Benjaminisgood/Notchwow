@@ -17,6 +17,6 @@
   <key>NSPrincipalClass</key>
   <string>NSApplication</string>
   <key>NSAppleEventsUsageDescription</key>
-  <string>notchwow uses Terminal automation to focus tabs, read terminal contents, and send commands you choose to run.</string>
+  <string>notchwow uses AppleScript automation to control apps, execute user scripts via osascript, and interact with Terminal for tab focus and command execution.</string>
 </dict>
 </plist>

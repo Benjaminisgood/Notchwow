@@ -69,7 +69,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(menuItem(title: "Show Markdown", action: #selector(showMarkdown), keyEquivalent: "1"))
         menu.addItem(menuItem(title: "Show Shell", action: #selector(showShell), keyEquivalent: "2"))
         menu.addItem(menuItem(title: "Show Python", action: #selector(showPython), keyEquivalent: "3"))
-        menu.addItem(menuItem(title: "Show Terminal Tasks", action: #selector(showTerminalTasks), keyEquivalent: "4"))
+        menu.addItem(menuItem(title: "Show AppleScript", action: #selector(showAppleScript), keyEquivalent: "4"))
+        menu.addItem(menuItem(title: "Show Terminal Tasks", action: #selector(showTerminalTasks), keyEquivalent: "5"))
 
         menu.addItem(.separator())
 
@@ -87,6 +88,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 title: "New Shell Workspace",
                 action: #selector(newShellWorkspace),
                 keyEquivalent: "s",
+                modifiers: [.command, .option]
+            )
+        )
+        menu.addItem(
+            menuItem(
+                title: "New AppleScript File",
+                action: #selector(newAppleScriptFile),
+                keyEquivalent: "a",
                 modifiers: [.command, .option]
             )
         )
@@ -108,6 +117,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 action: #selector(runPythonCommand),
                 keyEquivalent: "\r",
                 modifiers: [.command, .option]
+            )
+        )
+        menu.addItem(
+            menuItem(
+                title: "Run AppleScript File",
+                action: #selector(runAppleScriptFile),
+                keyEquivalent: "\r",
+                modifiers: [.command, .control]
+            )
+        )
+        menu.addItem(
+            menuItem(
+                title: "Run AppleScript Command",
+                action: #selector(runAppleScriptCommand),
+                keyEquivalent: "\r",
+                modifiers: [.command, .control, .option]
             )
         )
 
@@ -202,6 +227,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panelController?.showWorkbenchMode(.tasks)
     }
 
+    @objc private func showAppleScript() {
+        panelController?.showWorkbenchMode(.appleScript)
+    }
+
     @objc private func newMarkdownNote() {
         panelController?.newMarkdownNote()
     }
@@ -214,6 +243,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panelController?.newShellWorkspace()
     }
 
+    @objc private func newAppleScriptFile() {
+        panelController?.newAppleScriptFile()
+    }
+
     @objc private func runShellCommand() {
         panelController?.runShellCommand()
     }
@@ -224,6 +257,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func runPythonCommand() {
         panelController?.runPythonCommand()
+    }
+
+    @objc private func runAppleScriptFile() {
+        panelController?.runAppleScriptFile()
+    }
+
+    @objc private func runAppleScriptCommand() {
+        panelController?.runAppleScriptCommand()
     }
 
     @objc private func openNewTerminalWindow() {

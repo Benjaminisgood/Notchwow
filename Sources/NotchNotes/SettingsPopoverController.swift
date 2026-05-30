@@ -261,6 +261,14 @@ struct SettingsPopoverView: View {
                 )
 
                 DirectorySettingRow(
+                    title: "as cwd",
+                    path: $directoryStore.appleScriptDirectory,
+                    openAction: directoryStore.openAppleScriptDirectory,
+                    openInVSCodeAction: directoryStore.openAppleScriptDirectoryInVSCode,
+                    openInTerminalAction: directoryStore.openAppleScriptDirectoryInTerminal
+                )
+
+                DirectorySettingRow(
                     title: "launchd",
                     path: $directoryStore.launchdDirectory,
                     openAction: directoryStore.openLaunchdDirectory,

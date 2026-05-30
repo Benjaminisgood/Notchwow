@@ -50,6 +50,16 @@ final class NotchPanelController: NSObject {
         print("Hello from notchwow")
         """
     )
+    private let appleScriptStore = CodeFileStore(
+        rootURL: WorkspacePaths.appleScriptRoot,
+        fileExtension: "applescript",
+        defaultTemplate: """
+        -- New script
+
+        display notification "Hello from notchwow" with title "notchwow"
+        """,
+        commentPrefix: "-- "
+    )
     private lazy var terminalRunner = CommandRunner(
         workingDirectory: directoryStore.shellWorkingDirectoryURL,
         input: "pwd",
@@ -62,6 +72,15 @@ final class NotchPanelController: NSObject {
     private let pythonRunner = PythonReplRunner(
         workingDirectory: WorkspacePaths.pythonRoot,
         outputPersistenceURL: WorkspacePaths.pythonOutputFile
+    )
+    private lazy var appleScriptRunner = CommandRunner(
+        workingDirectory: directoryStore.appleScriptDirectoryURL,
+        input: "",
+        shellBootstrapURL: nil,
+        environment: [:],
+        inputPersistenceURL: WorkspacePaths.appleScriptInputFile,
+        outputPersistenceURL: WorkspacePaths.appleScriptOutputFile,
+        showsCommandTimestamps: true
     )
     private lazy var settingsPopoverController = SettingsPopoverController(
         settingsStore: settingsStore,
@@ -210,6 +229,40 @@ final class NotchPanelController: NSObject {
         )
     }
 
+    func newAppleScriptFile() {
+        appleScriptStore.addFile()
+        showWorkbenchMode(.appleScript)
+    }
+
+    func runAppleScriptFile() {
+        showWorkbenchMode(.appleScript)
+        appleScriptStore.persistActiveFile()
+        let filePath = appleScriptStore.activeFile.filePath
+        appleScriptRunner.useWorkingDirectory(directoryStore.appleScriptDirectoryURL)
+        appleScriptRunner.run(
+            "/usr/bin/osascript \(filePath.shellEscaped)",
+            displayCommand: "osascript \(appleScriptStore.activeFile.fileName)",
+            displayPrompt: "▶",
+            clearsInputOnRun: false,
+            showsSuccessfulExit: true,
+            showsFailedExit: true
+        )
+    }
+
+    func runAppleScriptCommand() {
+        showWorkbenchMode(.appleScript)
+        appleScriptRunner.useWorkingDirectory(directoryStore.appleScriptDirectoryURL)
+        let command = appleScriptRunner.input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !command.isEmpty else { return }
+        appleScriptRunner.run(
+            "/usr/bin/osascript -e \(command.shellEscaped)",
+            displayPrompt: "▶",
+            clearsInputOnRun: true,
+            showsSuccessfulExit: true,
+            showsFailedExit: true
+        )
+    }
+
     func openNewTerminalWindow() {
         showWorkbenchMode(.tasks)
         terminalTaskStore.openNewTerminalWindow(workingDirectory: directoryStore.shellWorkingDirectoryURL.path)
@@ -247,6 +300,7 @@ final class NotchPanelController: NSObject {
             editorInteractionState: editorInteractionState,
             workbenchState: workbenchState,
             pythonStore: pythonStore,
+            appleScriptStore: appleScriptStore,
             shellCommandStore: shellCommandStore,
             shellWorkspaceStore: shellWorkspaceStore,
             terminalTaskStore: terminalTaskStore,
@@ -256,6 +310,7 @@ final class NotchPanelController: NSObject {
             directoryStore: directoryStore,
             terminalRunner: terminalRunner,
             pythonRunner: pythonRunner,
+            appleScriptRunner: appleScriptRunner,
             layout: layout,
             onOpenSettings: { [weak self] in self?.openSettingsPopover() }
         )

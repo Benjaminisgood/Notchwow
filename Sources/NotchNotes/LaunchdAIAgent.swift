@@ -94,6 +94,7 @@ struct LaunchdAIContext {
     let existingJobs: [LaunchdJob]
     let availableShellScripts: [String]
     let availablePythonScripts: [String]
+    let availableAppleScripts: [String]
     let selectedJob: LaunchdJob?
     let launchdPath: String
 }
@@ -147,6 +148,7 @@ private enum LaunchdAIClient {
     private static func systemPrompt(context: LaunchdAIContext) -> String {
         let shPath = WorkspacePaths.shellRoot.path
         let pyPath = WorkspacePaths.pythonRoot.path
+        let asPath = WorkspacePaths.appleScriptRoot.path
 
         var scriptList = ""
         if !context.availableShellScripts.isEmpty {
@@ -157,6 +159,11 @@ private enum LaunchdAIClient {
         if !context.availablePythonScripts.isEmpty {
             scriptList += "Python 脚本 (在 \(pyPath)/ 目录):\n"
             scriptList += context.availablePythonScripts.map { "  - \($0)" }.joined(separator: "\n")
+            scriptList += "\n"
+        }
+        if !context.availableAppleScripts.isEmpty {
+            scriptList += "AppleScript 脚本 (在 \(asPath)/ 目录，使用 /usr/bin/osascript 执行):\n"
+            scriptList += context.availableAppleScripts.map { "  - \($0)" }.joined(separator: "\n")
             scriptList += "\n"
         }
 
@@ -182,6 +189,7 @@ private enum LaunchdAIClient {
         - Label 使用 com.notchwow. 前缀
         - plist 文件存放在 \(context.launchdPath) 目录
         - Shell 脚本用 /bin/zsh 执行，Python 脚本用 /Users/ben/miniforge3/bin/python 执行
+        - AppleScript 脚本用 /usr/bin/osascript 执行完整脚本路径，例如 ProgramArguments = ["/usr/bin/osascript", "\(asPath)/脚本名.applescript"]
         - 如果用户提到的脚本在可用列表中，使用完整路径
         - 使用 StartInterval（秒数）或 StartCalendarInterval（日历时间）设置调度
         - 可以设置 StandardOutPath 和 StandardErrorPath 到 \(context.launchdPath) 目录下的 .log 文件
