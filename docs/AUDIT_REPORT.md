@@ -47,7 +47,7 @@
 swift build
 ./Scripts/test-logic.sh
 swift build -c release --product notchwow
-bash -n Scripts/package-app.sh Scripts/test-logic.sh script/build_and_run.sh
+bash -n Scripts/build_and_run.sh Scripts/package-app.sh Scripts/test-logic.sh
 git diff --check
 plutil -lint dist/notchwow.app/Contents/Info.plist
 ```

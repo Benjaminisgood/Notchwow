@@ -42,7 +42,7 @@ jobs:
           swift build
           swift test
           ./Scripts/test-logic.sh
-          bash -n Scripts/package-app.sh Scripts/notarize-app.sh Scripts/test-logic.sh script/build_and_run.sh
+          bash -n Scripts/build_and_run.sh Scripts/install-keyoti-agent-guide.sh Scripts/package-app.sh Scripts/notarize-app.sh Scripts/test-logic.sh
 
       - name: Package signed app
         run: COPY_TO_APPLICATIONS=0 ./Scripts/package-app.sh

@@ -148,7 +148,7 @@ struct ShellPane: View {
 
             Group {
                 if toolbarMode == .run {
-                    OutputView(output: runner.output)
+                    OutputView(output: shellOutputText)
                 } else {
                     ScriptAIReviewView(aiStore: aiStore)
                 }
@@ -183,6 +183,19 @@ struct ShellPane: View {
 
     private var editorHeight: CGFloat {
         max(size.height - outputHeight - toolbarHeight - separatorHeight * 2, 120)
+    }
+
+    private var shellOutputText: String {
+        guard runner.output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return runner.output
+        }
+
+        let status = runner.isRunning ? "running" : "ready"
+        return """
+        Shell \(status)
+        workspace \(workspaceStore.activeWorkspace.title)
+        cwd       \(directoryStore.shellWorkingDirectoryURL.path)
+        """
     }
 
     private func syncShellIntegration() {

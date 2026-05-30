@@ -19,10 +19,10 @@ swift build
 ### 运行和验证 app bundle
 
 ```bash
-./script/build_and_run.sh run
-./script/build_and_run.sh verify
-./script/build_and_run.sh logs
-./script/build_and_run.sh telemetry
+./Scripts/build_and_run.sh run
+./Scripts/build_and_run.sh verify
+./Scripts/build_and_run.sh logs
+./Scripts/build_and_run.sh telemetry
 ```
 
 脚本会构建 `notchwow`、重建 `dist/notchwow.app`、停止旧进程并重新打开应用。
@@ -84,7 +84,6 @@ Sources/notchwow/            应用源码
 Vendor/swift-markdown-engine 内置 Markdown 编辑器
 Resources/                   图标资源
 Scripts/                     打包和逻辑验证脚本
-script/                      本地调试运行脚本
 Tests/LogicSmokeTests/       独立逻辑测试入口
 docs/                        静态页和项目文档
 dist/                        本地 app bundle
@@ -106,7 +105,7 @@ dist/
 
 ## 5. 修改建议
 
-- 修改 UI 后至少执行一次 `./script/build_and_run.sh verify`。
+- 修改 UI 后至少执行一次 `./Scripts/build_and_run.sh verify`。
 - 修改 plist 或 Terminal 目录打开能力后检查 `dist/notchwow.app/Contents/Info.plist`：
 
 ```bash
@@ -116,7 +115,7 @@ plutil -lint dist/notchwow.app/Contents/Info.plist
 - 修改脚本后执行：
 
 ```bash
-bash -n Scripts/package-app.sh Scripts/notarize-app.sh Scripts/test-logic.sh script/build_and_run.sh
+bash -n Scripts/build_and_run.sh Scripts/install-keyoti-agent-guide.sh Scripts/package-app.sh Scripts/notarize-app.sh Scripts/test-logic.sh
 ```
 
 - 提交前执行：

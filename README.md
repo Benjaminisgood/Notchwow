@@ -27,7 +27,7 @@
 
 ```bash
 swift build
-./script/build_and_run.sh verify
+./Scripts/build_and_run.sh verify
 ```
 
 也可以直接运行 SwiftPM 产品：
@@ -57,7 +57,7 @@ swift test
 调试运行：
 
 ```bash
-./script/build_and_run.sh run
+./Scripts/build_and_run.sh run
 ```
 
 Release 打包并复制到 `/Applications/notchwow.app`：
@@ -85,6 +85,7 @@ Release 打包并复制到 `/Applications/notchwow.app`：
 
 - [架构说明](docs/ARCHITECTURE.md)
 - [开发与验证](docs/DEVELOPMENT.md)
+- [自动化 Agent 指南](docs/AUTOMATION_AGENT_GUIDE.md)
 - [代码审查报告](docs/AUDIT_REPORT.md)
 - [待讨论优化建议](docs/OPTIMIZATION_PROPOSALS.md)
 

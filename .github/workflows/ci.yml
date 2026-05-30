@@ -27,7 +27,7 @@ jobs:
         run: ./Scripts/test-logic.sh
 
       - name: Shell syntax
-        run: bash -n Scripts/package-app.sh Scripts/notarize-app.sh Scripts/test-logic.sh script/build_and_run.sh
+        run: bash -n Scripts/build_and_run.sh Scripts/install-keyoti-agent-guide.sh Scripts/package-app.sh Scripts/notarize-app.sh Scripts/test-logic.sh
 
       - name: Package ad hoc app
         run: APP_DIR="$RUNNER_TEMP/notchwow.app" COPY_TO_APPLICATIONS=0 ./Scripts/package-app.sh

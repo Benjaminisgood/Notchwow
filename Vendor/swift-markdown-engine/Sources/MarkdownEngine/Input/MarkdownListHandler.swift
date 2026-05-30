@@ -305,7 +305,7 @@ struct MarkdownLists {
                         newListItem = "\n" + leadingWhitespace + "\(number + 1). "
                     }
                 } else {
-                    let prefixIndent = leadingWhitespace.isEmpty ? "  " : leadingWhitespace
+                    let prefixIndent = leadingWhitespace
                     if hasCheckbox {
                         let bulletChar = marker.contains("•") ? "•" : "-"
                         newListItem = "\n" + prefixIndent + "\(bulletChar) [ ] "

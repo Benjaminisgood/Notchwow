@@ -1,6 +1,6 @@
-# 待讨论优化建议
+# 优化推进记录
 
-下面这些优化需要确认产品方向。每完成一项就及时git
+下面记录已经确认并持续提交的优化项。
 
 ## P0: 发布身份统一 ✅ 已完成
 
@@ -20,19 +20,11 @@
 
 ## P1: 可配置外部集成 ✅ 已完成
 
-现状：`~/Desktop/Benshell` 和 `~/miniforge3` 已经改为动态 Home，但仍是固定约定。
+完成：Settings 增加 Benshell 根目录和 Conda 根目录字段；找不到时显示轻量提示，不影响 Markdown、AppleScript 和 Jobs 使用。Shell 命令发现、初始化环境、Conda 环境发现和 Jobs AI 上下文均跟随配置。
 
-推荐：在 Settings 增加 Benshell 根目录和 Conda 根目录字段；找不到时显示轻量提示，不影响 Markdown、AppleScript 和 Jobs 使用。
+## P1: 统一删除语义 ✅ 已完成
 
-这些集成确实是个人固定环境，不过让其他用户能够配置也很不错，可以有。
-
-## P1: 笔记删除语义 ✅ 已完成
-
-现状：Markdown 文件会自动发现并同步。旧代码里曾存在“Remove current tab”，但没有明确是关闭视图还是删除磁盘文件；本次已移除这条未使用路径。
-
-恢复删除功能，使用“Move to Trash”并弹一次确认，而不是静默删除文件。单纯“关闭 tab”需要额外维护隐藏列表。提供删除、移到废纸篓，还是不提供删除。
-
-并且所有的模块都支持删除到废纸篓，并且UI上统一使用当前垃圾桶标识的位置按钮，至于当前的清空output等改到下面运行、暂停的按钮旁边，模块UI尽量统一。
+完成：Markdown、Shell、Python、AppleScript 和 Jobs 均支持顶部垃圾桶按钮确认后移到废纸篓。Shell workspace 会一起移动 transcript、input 和 script。清空输出按钮统一移动到底部运行控制区。
 
 ## P1: 自动清理 launchd 服务 ✅ 已完成
 
@@ -40,9 +32,7 @@
 
 ## P2: 拆分 NotebookView ✅ 已完成
 
-现状：清理后 `NotebookView.swift` 仍承载多个模式和通用 UI。
-
-推荐按功能拆成：
+完成：`NotebookView.swift` 从 2921 行缩减为 365 行，功能视图按以下目录拆分：
 
 ```text
 Views/Markdown/
@@ -52,8 +42,6 @@ Views/AppleScript/
 Views/Launchd/
 Views/Shared/
 ```
-
-结构优化
 
 ## P2: 统一 AI transport 与脚本 AI 编辑 ✅ 已完成
 
@@ -71,9 +59,11 @@ Views/Shared/
 2. CI 执行 Debug build、Release build、标准测试、逻辑 smoke tests、Shell 语法检查和 ZIP 校验。
 3. tag 发布流水线导入 Developer ID、执行 notarization、staple、ZIP 校验并上传 GitHub Release。
 
-## 补充功能
-当前我会让别的agents为我生成shell、py和as脚本，并且通过jobs模块的plist进行编排，shell、py和as脚本之间也会互相调用，这些脚本都存储在/Users/ben/keyoti 路径下，我该如何让agent知道如何了解这个项目，并指导如何正确的写脚本进正确的位置，并高质量的编排和自动化。
+## 补充功能：自动化 Agent 指南 ✅ 已完成
 
-## 小瑕疵：
-当前md模块的todolist回车后会出现和直接点击按钮构建的缩进不一的问题
-现在shell输出的空间没有内容时空荡荡的，也加上一些默认文字吧
+完成：新增 `docs/AUTOMATION_AGENT_GUIDE.md`、可安装的 `docs/templates/keyoti-AGENTS.md` 和 `Scripts/install-keyoti-agent-guide.sh`。已把通用规则安装到 `~/keyoti/AGENTS.md`，并保留 `~/keyoti/shs/AGENTS.md` 的 Shell 专用说明。
+
+## 小瑕疵 ✅ 已完成
+
+- Markdown todo 根级条目回车后不再被额外缩进两格，与工具栏插入保持一致。
+- Shell 输出为空时显示 `ready`、workspace 和 cwd。
