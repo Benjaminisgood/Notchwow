@@ -15,7 +15,7 @@ final class SettingsPopoverController: NSObject, NSWindowDelegate {
     private var localOutsideClickMonitor: Any?
     private var globalOutsideClickMonitor: Any?
     private var suppressShowUntil: Date?
-    private let contentSize = NSSize(width: 440, height: 480)
+    private let contentSize = NSSize(width: 440, height: 620)
 
     init(
         settingsStore: AppSettingsStore,
@@ -296,9 +296,38 @@ struct SettingsPopoverView: View {
                     isSecure: false
                 )
             }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("External Integrations")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.50))
+
+                DirectorySettingRow(
+                    title: "benshell",
+                    path: $directoryStore.benshellRootDirectory,
+                    openAction: directoryStore.openBenshellRootDirectory,
+                    openInVSCodeAction: directoryStore.openBenshellRootDirectoryInVSCode,
+                    openInTerminalAction: directoryStore.openBenshellRootDirectoryInTerminal
+                )
+
+                DirectorySettingRow(
+                    title: "conda",
+                    path: $directoryStore.condaRootDirectory,
+                    openAction: directoryStore.openCondaRootDirectory,
+                    openInVSCodeAction: directoryStore.openCondaRootDirectoryInVSCode,
+                    openInTerminalAction: directoryStore.openCondaRootDirectoryInTerminal
+                )
+
+                if let message = directoryStore.benshellIntegrationMessage {
+                    IntegrationStatusText(message: message)
+                }
+                if let message = directoryStore.condaIntegrationMessage {
+                    IntegrationStatusText(message: message)
+                }
+            }
         }
         .padding(14)
-        .frame(width: 440, height: 480)
+        .frame(width: 440, height: 620)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(Color(red: 0.045, green: 0.045, blue: 0.052).opacity(0.98))
@@ -310,6 +339,16 @@ struct SettingsPopoverView: View {
         .onAppear {
             appeared = true
         }
+    }
+}
+
+struct IntegrationStatusText: View {
+    let message: String
+
+    var body: some View {
+        Label(message, systemImage: "exclamationmark.triangle")
+            .font(.system(size: 10, weight: .medium, design: .monospaced))
+            .foregroundStyle(.orange.opacity(0.82))
     }
 }
 

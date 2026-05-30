@@ -18,13 +18,9 @@
 
 完成：删除 `TerminalTaskStore`、菜单触发入口和不可达的任务自动化代码；保留 Settings 中“在 Terminal 打开目录”的轻量辅助能力。任务编排统一由 Jobs 模块承担。
 
-## P1: 可配置外部集成
+## P1: 可配置外部集成 ✅ 已完成
 
-现状：`~/Desktop/Benshell` 和 `~/miniforge3` 已经改为动态 Home，但仍是固定约定。
-
-推荐：在 Settings 增加 Benshell 根目录和 Conda 根目录字段；找不到时显示轻量提示，不影响 Markdown、AppleScript 和 Jobs 使用。
-
-这些集成确实是个人固定环境，不过让其他用户能够配置也很不错，可以有。
+完成：Settings 增加 Benshell 根目录和 Conda 根目录字段；找不到时显示轻量提示，不影响 Markdown、AppleScript 和 Jobs 使用。Shell 命令发现、初始化环境、Conda 环境发现和 Jobs AI 上下文均跟随配置。
 
 ## P1: 笔记删除语义
 

@@ -13,8 +13,8 @@ final class CommandRunner: ObservableObject, @unchecked Sendable {
     @Published private(set) var isRunning = false
 
     private var workingDirectory: URL
-    private let shellBootstrapURL: URL?
-    private let environment: [String: String]
+    private var shellBootstrapURL: URL?
+    private var environment: [String: String]
     private var inputPersistenceURL: URL?
     private var outputPersistenceURL: URL?
     private let showsCommandTimestamps: Bool
@@ -162,6 +162,12 @@ final class CommandRunner: ObservableObject, @unchecked Sendable {
     func useWorkingDirectory(_ url: URL) {
         guard !isRunning else { return }
         workingDirectory = url
+    }
+
+    func useShellConfiguration(bootstrapURL: URL?, environment: [String: String]) {
+        guard !isRunning else { return }
+        shellBootstrapURL = bootstrapURL
+        self.environment = environment
     }
 
     func usePersistence(

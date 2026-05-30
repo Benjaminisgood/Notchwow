@@ -40,8 +40,10 @@ final class CondaEnvironmentStore: ObservableObject {
 
     private static let selectedEnvironmentKey = "notchwow.selectedCondaEnvironment"
     private static let legacySelectedEnvironmentKey = "notchNotes.selectedCondaEnvironment"
+    private var configuredCondaRootURL: URL
 
-    init() {
+    init(condaRootURL: URL = WorkspacePaths.condaRoot) {
+        configuredCondaRootURL = condaRootURL.standardizedFileURL
         selectedEnvironmentName = AppDefaults.string(forKey: Self.selectedEnvironmentKey, migrating: Self.legacySelectedEnvironmentKey)
             ?? "base"
         refresh()
@@ -58,6 +60,13 @@ final class CondaEnvironmentStore: ObservableObject {
     func select(_ name: String) {
         selectedEnvironmentName = name
         AppDefaults.set(name, forKey: Self.selectedEnvironmentKey, removing: Self.legacySelectedEnvironmentKey)
+    }
+
+    func useCondaRoot(_ rootURL: URL) {
+        let nextURL = rootURL.standardizedFileURL
+        guard configuredCondaRootURL.path != nextURL.path else { return }
+        configuredCondaRootURL = nextURL
+        refresh()
     }
 
     func refresh() {
@@ -178,11 +187,11 @@ final class CondaEnvironmentStore: ObservableObject {
     }
 
     var condaRootURL: URL {
-        WorkspacePaths.condaRoot
+        configuredCondaRootURL
     }
 
     private func resolveCondaExecutable() -> String {
-        let preferredPath = WorkspacePaths.condaExecutable.path
+        let preferredPath = condaRootURL.appendingPathComponent("bin/conda", isDirectory: false).path
         if FileManager.default.isExecutableFile(atPath: preferredPath) {
             return preferredPath
         }

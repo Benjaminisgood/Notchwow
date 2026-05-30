@@ -23,8 +23,10 @@ final class ShellCommandStore: ObservableObject {
 
     private static let selectedToolkitKey = "notchwow.selectedShellToolkit"
     private static let legacySelectedToolkitKey = "notchNotes.selectedShellToolkit"
+    private var benshellRootURL: URL
 
-    init() {
+    init(benshellRootURL: URL = WorkspacePaths.benshellRoot) {
+        self.benshellRootURL = benshellRootURL.standardizedFileURL
         selectedToolkitName = AppDefaults.string(forKey: Self.selectedToolkitKey, migrating: Self.legacySelectedToolkitKey)
             ?? "benshell"
         refresh()
@@ -48,11 +50,19 @@ final class ShellCommandStore: ObservableObject {
     }
 
     func refresh() {
-        commands = Self.loadScriptCommands() + Self.loadAliasCommands()
+        commands = Self.loadScriptCommands(benshellRootURL: benshellRootURL)
+            + Self.loadAliasCommands(benshellRootURL: benshellRootURL)
         if !toolkits.contains(where: { $0.name == selectedToolkitName }),
            let firstToolkit = toolkits.first {
             selectToolkit(firstToolkit.name)
         }
+    }
+
+    func useBenshellRoot(_ rootURL: URL) {
+        let nextURL = rootURL.standardizedFileURL
+        guard benshellRootURL.path != nextURL.path else { return }
+        benshellRootURL = nextURL
+        refresh()
     }
 
     func selectToolkit(_ name: String) {
@@ -86,8 +96,8 @@ final class ShellCommandStore: ObservableObject {
         }
     }
 
-    private nonisolated static func loadScriptCommands() -> [ShellCommandItem] {
-        let scriptsRoot = WorkspacePaths.benshellRoot.appendingPathComponent("scripts", isDirectory: true)
+    private nonisolated static func loadScriptCommands(benshellRootURL: URL) -> [ShellCommandItem] {
+        let scriptsRoot = benshellRootURL.appendingPathComponent("scripts", isDirectory: true)
         let urls = (try? FileManager.default.contentsOfDirectory(
             at: scriptsRoot,
             includingPropertiesForKeys: [.isDirectoryKey, .isExecutableKey],
@@ -186,8 +196,8 @@ final class ShellCommandStore: ObservableObject {
         return "\(scriptName) \(runnableSignature)"
     }
 
-    private nonisolated static func loadAliasCommands() -> [ShellCommandItem] {
-        let aliasesRoot = WorkspacePaths.benshellRoot.appendingPathComponent("zsh/aliases", isDirectory: true)
+    private nonisolated static func loadAliasCommands(benshellRootURL: URL) -> [ShellCommandItem] {
+        let aliasesRoot = benshellRootURL.appendingPathComponent("zsh/aliases", isDirectory: true)
         let urls = (try? FileManager.default.contentsOfDirectory(
             at: aliasesRoot,
             includingPropertiesForKeys: nil,

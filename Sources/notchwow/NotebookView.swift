@@ -697,6 +697,7 @@ struct LaunchdPane: View {
     @ObservedObject var jobStore: LaunchdJobStore
     @ObservedObject var aiAgent: LaunchdAIAgent
     @ObservedObject var settingsStore: AppSettingsStore
+    @ObservedObject var directoryStore: WorkspaceDirectoryStore
     let size: CGSize
 
     private let toolbarHeight: CGFloat = 34
@@ -726,7 +727,8 @@ struct LaunchdPane: View {
             LaunchdInputToolbar(
                 jobStore: jobStore,
                 aiAgent: aiAgent,
-                settingsStore: settingsStore
+                settingsStore: settingsStore,
+                directoryStore: directoryStore
             )
                 .frame(width: size.width, height: toolbarHeight)
                 .background(Color(red: 0.055, green: 0.055, blue: 0.065))
@@ -763,6 +765,7 @@ struct LaunchdInputToolbar: View {
     @ObservedObject var jobStore: LaunchdJobStore
     @ObservedObject var aiAgent: LaunchdAIAgent
     @ObservedObject var settingsStore: AppSettingsStore
+    @ObservedObject var directoryStore: WorkspaceDirectoryStore
     @State private var isShowingLoadedPicker = false
 
     var body: some View {
@@ -821,7 +824,8 @@ struct LaunchdInputToolbar: View {
             availablePythonScripts: listScripts(in: WorkspacePaths.pythonRoot, ext: "py"),
             availableAppleScripts: listScripts(in: WorkspacePaths.appleScriptRoot, ext: "applescript"),
             selectedJob: jobStore.selectedJob,
-            launchdPath: settingsStore.launchdPath
+            launchdPath: settingsStore.launchdPath,
+            pythonExecutablePath: directoryStore.condaPythonExecutableURL.path
         )
         aiAgent.submit(settings: settingsStore, context: context)
     }
@@ -1036,6 +1040,7 @@ struct WorkbenchContentView: View {
                     jobStore: launchdJobStore,
                     aiAgent: launchdAIAgent,
                     settingsStore: settingsStore,
+                    directoryStore: directoryStore,
                     size: size
                 )
             }
@@ -1150,10 +1155,13 @@ struct PythonWorkspaceView: View {
             .background(Color(red: 0.055, green: 0.055, blue: 0.065))
         }
         .onAppear {
-            runner.useWorkingDirectory(directoryStore.pythonProjectDirectoryURL)
+            syncPythonIntegration()
         }
         .onChange(of: directoryStore.pythonProjectDirectory) { _, _ in
-            runner.useWorkingDirectory(directoryStore.pythonProjectDirectoryURL)
+            syncPythonIntegration()
+        }
+        .onChange(of: directoryStore.condaRootDirectory) { _, _ in
+            syncPythonIntegration()
         }
     }
 
@@ -1173,6 +1181,11 @@ struct PythonWorkspaceView: View {
         file \(codeStore.activeFile.fileName)
         cwd  \(directoryStore.pythonProjectDirectoryURL.path)
         """
+    }
+
+    private func syncPythonIntegration() {
+        runner.useWorkingDirectory(directoryStore.pythonProjectDirectoryURL)
+        condaStore.useCondaRoot(directoryStore.condaRootDirectoryURL)
     }
 }
 
@@ -1709,15 +1722,27 @@ struct ShellPane: View {
                 .background(Color(red: 0.055, green: 0.055, blue: 0.065))
         }
         .onAppear {
-            runner.useWorkingDirectory(directoryStore.shellWorkingDirectoryURL)
+            syncShellIntegration()
         }
         .onChange(of: directoryStore.shellWorkingDirectory) { _, _ in
-            runner.useWorkingDirectory(directoryStore.shellWorkingDirectoryURL)
+            syncShellIntegration()
+        }
+        .onChange(of: directoryStore.benshellRootDirectory) { _, _ in
+            syncShellIntegration()
         }
     }
 
     private var editorHeight: CGFloat {
         max(size.height - outputHeight - toolbarHeight - separatorHeight * 2, 120)
+    }
+
+    private func syncShellIntegration() {
+        runner.useWorkingDirectory(directoryStore.shellWorkingDirectoryURL)
+        runner.useShellConfiguration(
+            bootstrapURL: directoryStore.benshellInitScriptURL,
+            environment: ["BENSHELL_HOME": directoryStore.benshellRootDirectoryURL.path]
+        )
+        commandStore.useBenshellRoot(directoryStore.benshellRootDirectoryURL)
     }
 }
 

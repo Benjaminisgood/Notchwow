@@ -19,8 +19,8 @@
 
 - macOS 14 或更高版本。
 - Swift 6 工具链。
-- 可选：`~/miniforge3`，用于 Conda 环境发现和 Python REPL。
-- 可选：`~/Desktop/Benshell`，用于加载 Shell 初始化脚本和命令目录。
+- 可选：`~/miniforge3`，用于 Conda 环境发现和 Python REPL，可在 Settings 中覆盖。
+- 可选：`~/Desktop/Benshell`，用于加载 Shell 初始化脚本和命令目录，可在 Settings 中覆盖。
 
 ## 快速开始
 
@@ -35,7 +35,7 @@ swift build
 swift run notchwow
 ```
 
-展开应用后，在设置中可以修改 Markdown、Shell、Python、AppleScript 和 `launchd` 的工作目录。
+展开应用后，在设置中可以修改 Markdown、Shell、Python、AppleScript 和 `launchd` 的工作目录，也可以覆盖 Benshell 与 Conda 根目录。
 
 ## 测试
 

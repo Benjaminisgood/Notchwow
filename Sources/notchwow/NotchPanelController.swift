@@ -35,11 +35,11 @@ final class NotchPanelController: NSObject {
     private let drawerState = DrawerState()
     private let editorInteractionState = EditorInteractionState()
     private let workbenchState = WorkbenchState()
-    private let shellCommandStore = ShellCommandStore()
+    private lazy var shellCommandStore = ShellCommandStore(benshellRootURL: directoryStore.benshellRootDirectoryURL)
     private let shellWorkspaceStore = ShellWorkspaceStore()
     private let launchdJobStore = LaunchdJobStore()
     private let launchdAIAgent = LaunchdAIAgent()
-    private let condaStore = CondaEnvironmentStore()
+    private lazy var condaStore = CondaEnvironmentStore(condaRootURL: directoryStore.condaRootDirectoryURL)
     private let pythonStore = CodeFileStore(
         rootURL: WorkspacePaths.pythonRoot,
         fileExtension: "py",
@@ -62,8 +62,8 @@ final class NotchPanelController: NSObject {
     private lazy var terminalRunner = CommandRunner(
         workingDirectory: directoryStore.shellWorkingDirectoryURL,
         input: "pwd",
-        shellBootstrapURL: WorkspacePaths.benshellInitScript,
-        environment: ["BENSHELL_HOME": WorkspacePaths.benshellRoot.path],
+        shellBootstrapURL: directoryStore.benshellInitScriptURL,
+        environment: ["BENSHELL_HOME": directoryStore.benshellRootDirectoryURL.path],
         inputPersistenceURL: shellWorkspaceStore.activeWorkspace.inputURL,
         outputPersistenceURL: shellWorkspaceStore.activeWorkspace.transcriptURL,
         showsCommandTimestamps: true
@@ -199,19 +199,19 @@ final class NotchPanelController: NSObject {
             inputURL: workspace.inputURL,
             outputURL: workspace.transcriptURL
         )
-        terminalRunner.useWorkingDirectory(directoryStore.shellWorkingDirectoryURL)
+        syncShellIntegration()
         showWorkbenchMode(.terminal)
     }
 
     func runShellCommand() {
         showWorkbenchMode(.terminal)
-        terminalRunner.useWorkingDirectory(directoryStore.shellWorkingDirectoryURL)
+        syncShellIntegration()
         terminalRunner.run(clearsInputOnRun: true)
     }
 
     func runPythonFile() {
         showWorkbenchMode(.python)
-        pythonRunner.useWorkingDirectory(directoryStore.pythonProjectDirectoryURL)
+        syncPythonIntegration()
         let filePath = pythonStore.activeFile.filePath
         pythonRunner.runFile(
             configuration: condaStore.pythonLaunchConfiguration(bridgeScript: PythonReplRunner.bridgeScript),
@@ -222,7 +222,7 @@ final class NotchPanelController: NSObject {
 
     func runPythonCommand() {
         showWorkbenchMode(.python)
-        pythonRunner.useWorkingDirectory(directoryStore.pythonProjectDirectoryURL)
+        syncPythonIntegration()
         pythonRunner.run(
             configuration: condaStore.pythonLaunchConfiguration(bridgeScript: PythonReplRunner.bridgeScript)
         )
@@ -260,6 +260,20 @@ final class NotchPanelController: NSObject {
             showsSuccessfulExit: true,
             showsFailedExit: true
         )
+    }
+
+    private func syncShellIntegration() {
+        terminalRunner.useWorkingDirectory(directoryStore.shellWorkingDirectoryURL)
+        terminalRunner.useShellConfiguration(
+            bootstrapURL: directoryStore.benshellInitScriptURL,
+            environment: ["BENSHELL_HOME": directoryStore.benshellRootDirectoryURL.path]
+        )
+        shellCommandStore.useBenshellRoot(directoryStore.benshellRootDirectoryURL)
+    }
+
+    private func syncPythonIntegration() {
+        pythonRunner.useWorkingDirectory(directoryStore.pythonProjectDirectoryURL)
+        condaStore.useCondaRoot(directoryStore.condaRootDirectoryURL)
     }
 
     private func configurePanel(_ panel: NotchPanel) {
