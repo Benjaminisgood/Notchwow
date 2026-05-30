@@ -17,7 +17,6 @@ struct LogicSmokeTests {
         try testWorkspaceDefaultsUseCurrentHomeDirectory()
         try testSanitizedFileStemRemovesPathSeparatorsAndControlCharacters()
         try testUniquedFileURLAddsNumericSuffix()
-        try testTerminalSummaryShortensCurrentHomeDirectory()
         try testLaunchdTemplateRoundTripsLabel()
         try testLaunchdLabelParserRejectsMalformedPropertyList()
         print("Logic smoke tests passed")
@@ -63,19 +62,6 @@ struct LogicSmokeTests {
             in: directory
         )
         try expect(next.lastPathComponent == "note 2.md", "Duplicate filenames should gain a numeric suffix")
-    }
-
-    private static func testTerminalSummaryShortensCurrentHomeDirectory() throws {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-
-        try expect(
-            TerminalTaskStore.shortCommand("\(home)/Desktop/project/run.sh") == "~/Desktop/project/run.sh",
-            "Terminal summaries should abbreviate the current Desktop path"
-        )
-        try expect(
-            TerminalTaskStore.shortCommand("\(home)/project/run.sh") == "~/project/run.sh",
-            "Terminal summaries should abbreviate the current home path"
-        )
     }
 
     private static func testLaunchdTemplateRoundTripsLabel() throws {

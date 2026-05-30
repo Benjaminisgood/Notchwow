@@ -13,7 +13,7 @@
 - Python 工作区：脚本编辑、Conda 环境发现、持久 REPL、脚本执行。
 - AppleScript 工作区：脚本编辑、单行命令和文件执行。
 - Jobs 工作区：创建、编辑、加载、卸载 `launchd` plist，并可用 AI 生成任务配置。
-- Terminal 自动化：通过 AppleScript 打开 Terminal 窗口；仓库内还保留了待产品化的进程检查器。
+- Terminal 辅助：可从 Settings 中把工作目录直接在 Terminal 打开。
 
 ## 环境要求
 

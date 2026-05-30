@@ -14,11 +14,9 @@
 
 完成：使用 Security.framework 封装 Keychain 存取，并做一次从旧 UserDefaults 到 Keychain 的迁移；迁移成功后删除旧值。
 
-## P1: Terminal 进程检查器去留
+## P1: Terminal 进程检查器去留 ✅ 已完成
 
-现状：`TerminalTaskStore` 可以发现进程组、聚焦 Terminal tab、读取快照、结束任务，但当前没有可见 UI。只有菜单中的“新建 Terminal 窗口”和“刷新 Terminal Tasks”仍会触发它。
-
-不再需要Terminal模块，完全迁移成jobs这个最终方案
+完成：删除 `TerminalTaskStore`、菜单触发入口和不可达的任务自动化代码；保留 Settings 中“在 Terminal 打开目录”的轻量辅助能力。任务编排统一由 Jobs 模块承担。
 
 ## P1: 可配置外部集成
 

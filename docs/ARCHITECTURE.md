@@ -2,7 +2,7 @@
 
 ## 1. 项目定位
 
-`notchwow` 是一个 SwiftPM 管理的 macOS 原生可执行应用。AppKit 负责屏幕、窗口层级、Terminal 自动化和事件监控；SwiftUI 负责工作台界面；vendored `swift-markdown-engine` 负责 Markdown 编辑器能力。
+`notchwow` 是一个 SwiftPM 管理的 macOS 原生可执行应用。AppKit 负责屏幕、窗口层级、目录打开和事件监控；SwiftUI 负责工作台界面；vendored `swift-markdown-engine` 负责 Markdown 编辑器能力。
 
 SwiftPM 产品名和主 target 均为 `notchwow`：
 
@@ -30,7 +30,7 @@ Package.swift
 | `NotchPanelController.swift` | 刘海热区、窗口展开折叠、鼠标轮询、Store 装配。 |
 | `SettingsPopoverController.swift` | 设置弹窗窗口与点击外部关闭逻辑。 |
 | `NotchGeometry.swift` | 目标屏幕、刘海测量、面板尺寸。 |
-| `TerminalAppBridge.swift` | 使用 `osascript` 控制 Terminal.app。 |
+| `TerminalAppBridge.swift` | 使用 `osascript` 在 Terminal.app 打开指定目录。 |
 
 ### SwiftUI 层
 
@@ -54,7 +54,6 @@ Package.swift
 | `WorkspaceDirectoryStore.swift` | 用户可编辑的工作目录和持久化。 |
 | `LocalImageStore.swift` | Markdown 附件复制、manifest、图片解析。 |
 | `LaunchdJobStore.swift` | plist 扫描、保存、加载、卸载、孤儿服务清理。 |
-| `TerminalTaskStore.swift` | Terminal 进程组发现和 Terminal 自动化操作。 |
 | `AppSettingsStore.swift` | 触发方式、百炼 API Key、AI 模型。 |
 
 ### 执行与外部系统层
@@ -116,7 +115,7 @@ Package.swift
 ## 6. 安全边界
 
 - Shell、Python、AppleScript 和 `launchd` 都会执行用户输入，应用不应接收不可信脚本。
-- Terminal 自动化会触发 macOS Apple Events 权限提示。
+- 从 Settings 在 Terminal 打开目录会触发 macOS Apple Events 权限提示。
 - AI 功能会把笔记内容或任务上下文发送到百炼兼容接口。
 - API Key 保存在 macOS Keychain；旧版 `UserDefaults` 明文会在首次启动时迁移并删除。
 - `LaunchdJobStore` 会自动清理缺少本地 plist 的 `com.notchwow.*` 已加载任务。修改此策略前需要确认产品语义。

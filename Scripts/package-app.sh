@@ -63,7 +63,7 @@ cat > "$CONTENTS_DIR/Info.plist" <<PLIST
   <key>LSUIElement</key>
   <true/>
   <key>NSAppleEventsUsageDescription</key>
-  <string>notchwow uses Terminal automation to focus tabs, read terminal contents, and send commands you choose to run.</string>
+  <string>notchwow can open directories you choose in Terminal.</string>
 </dict>
 </plist>
 PLIST

@@ -37,7 +37,6 @@ final class NotchPanelController: NSObject {
     private let workbenchState = WorkbenchState()
     private let shellCommandStore = ShellCommandStore()
     private let shellWorkspaceStore = ShellWorkspaceStore()
-    private lazy var terminalTaskStore = TerminalTaskStore()
     private let launchdJobStore = LaunchdJobStore()
     private let launchdAIAgent = LaunchdAIAgent()
     private let condaStore = CondaEnvironmentStore()
@@ -261,16 +260,6 @@ final class NotchPanelController: NSObject {
             showsSuccessfulExit: true,
             showsFailedExit: true
         )
-    }
-
-    func openNewTerminalWindow() {
-        showWorkbenchMode(.tasks)
-        terminalTaskStore.openNewTerminalWindow(workingDirectory: directoryStore.shellWorkingDirectoryURL.path)
-    }
-
-    func refreshTerminalTasks() {
-        showWorkbenchMode(.tasks)
-        terminalTaskStore.refresh()
     }
 
     private func configurePanel(_ panel: NotchPanel) {

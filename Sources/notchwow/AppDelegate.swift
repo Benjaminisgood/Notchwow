@@ -136,24 +136,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
         )
 
-        menu.addItem(.separator())
-
-        menu.addItem(
-            menuItem(
-                title: "New Terminal Window",
-                action: #selector(openNewTerminalWindow),
-                keyEquivalent: "t",
-                modifiers: [.command, .option]
-            )
-        )
-        menu.addItem(
-            menuItem(
-                title: "Refresh Terminal Tasks",
-                action: #selector(refreshTerminalTasks),
-                keyEquivalent: "r",
-                modifiers: [.command, .option]
-            )
-        )
     }
 
     private func makeEditMenu() -> NSMenu {
@@ -265,14 +247,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func runAppleScriptCommand() {
         panelController?.runAppleScriptCommand()
-    }
-
-    @objc private func openNewTerminalWindow() {
-        panelController?.openNewTerminalWindow()
-    }
-
-    @objc private func refreshTerminalTasks() {
-        panelController?.refreshTerminalTasks()
     }
 
     @objc private func quit() {

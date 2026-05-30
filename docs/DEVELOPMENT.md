@@ -48,7 +48,6 @@ open dist/notchwow.app
 - 默认路径是否基于当前用户 Home。
 - 文件名清理规则。
 - 同名文件后缀生成。
-- Terminal 摘要中的 Home 缩写。
 - `launchd` plist 模板转义与 Label 解析。
 - 损坏 plist 的拒绝路径。
 
@@ -104,7 +103,7 @@ dist/
 ## 5. 修改建议
 
 - 修改 UI 后至少执行一次 `./script/build_and_run.sh verify`。
-- 修改 plist 或 Terminal 自动化后检查 `dist/notchwow.app/Contents/Info.plist`：
+- 修改 plist 或 Terminal 目录打开能力后检查 `dist/notchwow.app/Contents/Info.plist`：
 
 ```bash
 plutil -lint dist/notchwow.app/Contents/Info.plist

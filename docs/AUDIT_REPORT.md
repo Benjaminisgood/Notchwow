@@ -23,7 +23,7 @@
 - 设置弹窗窗口尺寸由 `400x408` 修正为与内容一致的 `440x480`，避免裁切。
 - 第五个工作台模式从误导性的 `Term` 改名为 `Jobs`。
 - 菜单项从 `Show Terminal Tasks` 改为 `Show Launchd Jobs`。
-- 未公开的 Terminal 进程检查器改为 lazy 初始化，不再在每次启动时无意义地每 3 秒扫描进程。
+- 未公开的 Terminal 进程检查器已删除，仅保留 Settings 的目录打开能力。
 
 ### Launchd
 
@@ -60,7 +60,6 @@ plutil -lint dist/notchwow.app/Contents/Info.plist
 
 - `docs/index.html` 的品牌和下载链接仍需统一到当前仓库。
 - `dist/notchwow.app` 仍在 Git 历史中被跟踪，和 `.gitignore` 目标不一致。
-- Terminal 进程检查器代码仍保留，但没有可见工作台入口。
 - 百炼 API Key 仍明文保存在 `UserDefaults`。
 - `NotebookView.swift` 仍然较大，适合按模式拆分。
 - 多处磁盘写入使用 `try?`，错误不会显示给用户。
