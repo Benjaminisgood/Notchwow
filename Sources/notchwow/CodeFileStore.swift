@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import Foundation
 
@@ -80,6 +81,15 @@ final class CodeFileStore: ObservableObject {
         files.append(file)
         activeFileID = file.id
         searchQuery = ""
+    }
+
+    func moveActiveFileToTrash() {
+        let url = activeFile.fileURL
+        NSWorkspace.shared.recycle([url]) { [weak self] _, _ in
+            Task { @MainActor in
+                self?.syncFromDisk()
+            }
+        }
     }
 
     func selectFile(_ id: UUID) {

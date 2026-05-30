@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import Foundation
 
@@ -193,20 +194,34 @@ final class LaunchdJobStore: ObservableObject {
         refresh()
     }
 
-    func deleteJob(_ job: LaunchdJob) {
+    func moveJobToTrash(_ job: LaunchdJob) {
         if job.isLoaded {
             let uid = getuid()
             let target = "gui/\(uid)/\(job.label)"
             _ = Self.runLaunchctl(["bootout", target])
         }
-        try? FileManager.default.removeItem(at: job.plistURL)
-        if selectedJobID == job.id {
-            selectedJobID = nil
-            editingContent = ""
+
+        NSWorkspace.shared.recycle([job.plistURL]) { [weak self] _, error in
+            Task { @MainActor in
+                guard let self else { return }
+                if let error {
+                    self.setMessage("Move to Trash failed: \(error.localizedDescription)", isError: true)
+                    self.appendLog("Move to Trash failed: \(error.localizedDescription)")
+                    return
+                }
+                if self.selectedJobID == job.id {
+                    self.selectedJobID = nil
+                    self.editingContent = ""
+                }
+                self.setMessage("Moved \(job.detail) to Trash")
+                self.appendLog("Moved \(job.detail) to Trash")
+                self.refresh()
+            }
         }
-        setMessage("Deleted \(job.detail)")
-        appendLog("🗑 Deleted \(job.detail)")
-        refresh()
+    }
+
+    func clearOutputLog() {
+        outputLog = ""
     }
 
     func appendLog(_ message: String) {

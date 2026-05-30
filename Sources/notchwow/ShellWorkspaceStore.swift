@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import Foundation
 
@@ -60,6 +61,19 @@ final class ShellWorkspaceStore: ObservableObject {
         sortWorkspaces()
         selectWorkspace(workspace.id)
         searchQuery = ""
+    }
+
+    func moveActiveWorkspaceToTrash() {
+        let workspace = activeWorkspace
+        NSWorkspace.shared.recycle([
+            workspace.transcriptURL,
+            workspace.inputURL,
+            workspace.scriptURL
+        ]) { [weak self] _, _ in
+            Task { @MainActor in
+                self?.syncFromDisk()
+            }
+        }
     }
 
     func selectWorkspace(_ id: String) {

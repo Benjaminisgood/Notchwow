@@ -14,6 +14,7 @@
 - AppleScript 工作区：脚本编辑、单行命令和文件执行。
 - Jobs 工作区：创建、编辑、加载、卸载 `launchd` plist，并可用 AI 生成任务配置。
 - Terminal 辅助：可从 Settings 中把工作目录直接在 Terminal 打开。
+- 统一删除：各工作区顶部垃圾桶按钮会在确认后把当前资源移到废纸篓。
 
 ## 环境要求
 

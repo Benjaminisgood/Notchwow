@@ -393,6 +393,7 @@ struct MarkdownTopToolsView: View {
     @ObservedObject var store: NoteStore
     let editorInteractionState: EditorInteractionState
     @State private var isShowingSearchResults = false
+    @State private var isConfirmingTrash = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -439,6 +440,19 @@ struct MarkdownTopToolsView: View {
                 .buttonStyle(MarkdownToolbarButtonStyle())
                 .help("New Markdown")
 
+                Button {
+                    isConfirmingTrash = true
+                } label: {
+                    Image(systemName: "trash")
+                        .frame(width: 24, height: 22)
+                }
+                .buttonStyle(MarkdownToolbarButtonStyle())
+                .help("Move Markdown file to Trash")
+            }
+        }
+        .confirmationDialog("Move Markdown file to Trash?", isPresented: $isConfirmingTrash) {
+            Button("Move to Trash", role: .destructive) {
+                store.moveActiveTabToTrash()
             }
         }
     }
@@ -453,6 +467,7 @@ struct PythonTopToolsView: View {
     @ObservedObject var codeStore: CodeFileStore
     @ObservedObject var runner: PythonReplRunner
     @State private var isShowingSearchResults = false
+    @State private var isConfirmingTrash = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -498,13 +513,18 @@ struct PythonTopToolsView: View {
                 .help("New Python file")
 
                 Button {
-                    runner.clear()
+                    isConfirmingTrash = true
                 } label: {
                     Image(systemName: "trash")
                         .frame(width: 24, height: 22)
                 }
                 .buttonStyle(MarkdownToolbarButtonStyle())
-                .help("Clear Python output")
+                .help("Move Python file to Trash")
+            }
+        }
+        .confirmationDialog("Move Python file to Trash?", isPresented: $isConfirmingTrash) {
+            Button("Move to Trash", role: .destructive) {
+                codeStore.moveActiveFileToTrash()
             }
         }
     }
@@ -514,6 +534,7 @@ struct ShellTopToolsView: View {
     @ObservedObject var workspaceStore: ShellWorkspaceStore
     @ObservedObject var runner: CommandRunner
     @State private var isShowingSearchResults = false
+    @State private var isConfirmingTrash = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -561,13 +582,19 @@ struct ShellTopToolsView: View {
                 .help("New Shell workspace")
 
                 Button {
-                    runner.clear()
+                    isConfirmingTrash = true
                 } label: {
                     Image(systemName: "trash")
                         .frame(width: 24, height: 22)
                 }
                 .buttonStyle(MarkdownToolbarButtonStyle())
-                .help("Clear Shell output")
+                .help("Move Shell workspace to Trash")
+            }
+        }
+        .confirmationDialog("Move Shell workspace to Trash?", isPresented: $isConfirmingTrash) {
+            Button("Move to Trash", role: .destructive) {
+                runner.stop()
+                workspaceStore.moveActiveWorkspaceToTrash()
             }
         }
         .onAppear(perform: syncRunnerStorage)
@@ -616,6 +643,7 @@ struct ShellWorkspaceSearchResultsPopover: View {
 struct LaunchdTopToolsView: View {
     @ObservedObject var jobStore: LaunchdJobStore
     @State private var isShowingSearchResults = false
+    @State private var isConfirmingTrash = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -660,6 +688,22 @@ struct LaunchdTopToolsView: View {
                 }
                 .buttonStyle(MarkdownToolbarButtonStyle())
                 .help("New plist")
+
+                Button {
+                    isConfirmingTrash = true
+                } label: {
+                    Image(systemName: "trash")
+                        .frame(width: 24, height: 22)
+                }
+                .buttonStyle(MarkdownToolbarButtonStyle())
+                .disabled(jobStore.selectedJob == nil)
+                .help("Move plist to Trash")
+            }
+        }
+        .confirmationDialog("Move launchd plist to Trash?", isPresented: $isConfirmingTrash) {
+            Button("Move to Trash", role: .destructive) {
+                guard let job = jobStore.selectedJob else { return }
+                jobStore.moveJobToTrash(job)
             }
         }
     }
@@ -813,6 +857,15 @@ struct LaunchdInputToolbar: View {
             .buttonStyle(MarkdownToolbarButtonStyle())
             .disabled(jobStore.selectedJob == nil)
             .help(jobStore.selectedJob?.isLoaded == true ? "Unload (stop)" : "Load (start)")
+
+            Button {
+                jobStore.clearOutputLog()
+            } label: {
+                Image(systemName: "clear")
+                    .frame(width: 26, height: 24)
+            }
+            .buttonStyle(MarkdownToolbarButtonStyle())
+            .help("Clear Jobs output")
         }
         .padding(.horizontal, 10)
     }
@@ -1242,6 +1295,15 @@ struct PythonCommandToolbar: View {
             .buttonStyle(MarkdownToolbarButtonStyle())
             .disabled(!runner.isRunning)
             .help("Stop")
+
+            Button {
+                runner.clear()
+            } label: {
+                Image(systemName: "clear")
+                    .frame(width: 26, height: 24)
+            }
+            .buttonStyle(MarkdownToolbarButtonStyle())
+            .help("Clear Python output")
         }
         .padding(.horizontal, 10)
     }
@@ -1334,6 +1396,7 @@ struct AppleScriptTopToolsView: View {
     @ObservedObject var codeStore: CodeFileStore
     @ObservedObject var runner: CommandRunner
     @State private var isShowingSearchResults = false
+    @State private var isConfirmingTrash = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -1379,13 +1442,18 @@ struct AppleScriptTopToolsView: View {
                 .help("New AppleScript file")
 
                 Button {
-                    runner.clear()
+                    isConfirmingTrash = true
                 } label: {
                     Image(systemName: "trash")
                         .frame(width: 24, height: 22)
                 }
                 .buttonStyle(MarkdownToolbarButtonStyle())
-                .help("Clear AppleScript output")
+                .help("Move AppleScript file to Trash")
+            }
+        }
+        .confirmationDialog("Move AppleScript file to Trash?", isPresented: $isConfirmingTrash) {
+            Button("Move to Trash", role: .destructive) {
+                codeStore.moveActiveFileToTrash()
             }
         }
     }
@@ -1508,6 +1576,15 @@ struct AppleScriptCommandToolbar: View {
             .buttonStyle(MarkdownToolbarButtonStyle())
             .disabled(!runner.isRunning)
             .help("Stop")
+
+            Button {
+                runner.clear()
+            } label: {
+                Image(systemName: "clear")
+                    .frame(width: 26, height: 24)
+            }
+            .buttonStyle(MarkdownToolbarButtonStyle())
+            .help("Clear AppleScript output")
         }
         .padding(.horizontal, 10)
     }
@@ -1817,6 +1894,15 @@ struct ShellInputToolbar: View {
             .buttonStyle(MarkdownToolbarButtonStyle())
             .disabled(!runner.isRunning)
             .help("Stop")
+
+            Button {
+                runner.clear()
+            } label: {
+                Image(systemName: "clear")
+                    .frame(width: 26, height: 24)
+            }
+            .buttonStyle(MarkdownToolbarButtonStyle())
+            .help("Clear Shell output")
         }
         .padding(.horizontal, 10)
         .popover(isPresented: $isShowingCommandSuggestions, arrowEdge: .top) {

@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import Foundation
 
@@ -114,6 +115,15 @@ final class NoteStore: ObservableObject {
         activeTabID = tab.id
         searchQuery = ""
         save()
+    }
+
+    func moveActiveTabToTrash() {
+        guard let url = activeTab.fileURL else { return }
+        NSWorkspace.shared.recycle([url]) { [weak self] _, _ in
+            Task { @MainActor in
+                self?.syncFromDisk()
+            }
+        }
     }
 
     func selectTab(_ id: UUID) {
