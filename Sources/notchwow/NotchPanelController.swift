@@ -56,11 +56,11 @@ final class NotchPanelController: NSObject {
         rootURL: WorkspacePaths.appleScriptRoot,
         fileExtension: "applescript",
         defaultTemplate: """
-        -- New script
+        -- title: New script
 
-        display notification "Hello from notchwow" with title "notchwow"
+        return "Hello from notchwow"
         """,
-        commentPrefix: "-- "
+        commentPrefix: "-- title: "
     )
     private lazy var terminalRunner = CommandRunner(
         workingDirectory: directoryStore.shellWorkingDirectoryURL,
@@ -242,7 +242,7 @@ final class NotchPanelController: NSObject {
         let filePath = appleScriptStore.activeFile.filePath
         appleScriptRunner.useWorkingDirectory(directoryStore.appleScriptDirectoryURL)
         appleScriptRunner.run(
-            "/usr/bin/osascript \(filePath.shellEscaped)",
+            AppleScriptCommand.runFile(filePath),
             displayCommand: "osascript \(appleScriptStore.activeFile.fileName)",
             displayPrompt: "▶",
             clearsInputOnRun: false,

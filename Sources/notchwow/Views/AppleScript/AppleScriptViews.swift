@@ -3,6 +3,12 @@ import MarkdownEngine
 import MarkdownEngineLatex
 import SwiftUI
 
+enum AppleScriptCommand {
+    static func runFile(_ filePath: String) -> String {
+        "/usr/bin/osacompile -o /dev/null \(filePath.shellEscaped) && /usr/bin/osascript \(filePath.shellEscaped)"
+    }
+}
+
 struct AppleScriptTopToolsView: View {
     @ObservedObject var codeStore: CodeFileStore
     @ObservedObject var runner: CommandRunner
@@ -149,6 +155,7 @@ struct AppleScriptWorkspaceView: View {
         AppleScript \(status)
         file \(codeStore.activeFile.fileName)
         cwd  \(directoryStore.appleScriptDirectoryURL.path)
+        run  syntax check, then execute
         """
     }
 }
@@ -236,7 +243,7 @@ struct AppleScriptCommandToolbar: View {
         codeStore.persistActiveFile()
         let filePath = codeStore.activeFile.filePath
         runner.run(
-            "/usr/bin/osascript \(filePath.shellEscaped)",
+            AppleScriptCommand.runFile(filePath),
             displayCommand: "osascript \(codeStore.activeFile.fileName)",
             displayPrompt: "▶",
             clearsInputOnRun: false,
