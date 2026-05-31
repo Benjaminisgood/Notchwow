@@ -35,6 +35,7 @@ Before editing scripts or plist files, read `~/Desktop/notchwow/docs/AUTOMATION_
 - Treat GUI automation as draft-only unless the user explicitly requests the final irreversible action.
 - For daily artifacts, check the dated directory or filename first. If today's artifact is absent, build it immediately; otherwise keep reruns idempotent.
 - Write every human-readable AI or automation report as `.html`. Use JSON only for machine state; do not use Markdown as the final report format.
+- Treat Markdown notes as read-only sources. Write note-derived exercise pages to `~/Desktop/Keyoti_Reports/note-exercises/`; never write them back into `~/keyoti/mds/`.
 - Updating a plist does not reload an already running job. Do not run `launchctl bootstrap` or `bootout` without explicit approval.
 
 ## Validation
