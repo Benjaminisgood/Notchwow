@@ -21,9 +21,30 @@ Before editing scripts or plist files, read `~/Desktop/notchwow/docs/AUTOMATION_
 - Use `com.notchwow.` for launchd labels.
 - Do not load, unload, or delete launchd jobs without explicit approval.
 
+## Architecture
+
+- Keep Shell files as small entrypoints. Source `shs/workspace-scripts/automation-common.sh` for environment setup.
+- Put structured state handling and non-trivial business logic in `pys/*.py`.
+- Use AppleScript only for macOS UI integration such as notifications, window management, quick notes, and opt-in message drafts.
+- Keep generated JSON, logs, PID files, and locks under `shs/workspaces/`.
+- Prefer deterministic local generation. AI and network calls may enhance a task, but a scheduled job should still produce an inspectable result when they fail.
+
+## Safety Defaults
+
+- Scheduled jobs must not rewrite papis metadata, commit or push repositories, delete files, or send chat messages automatically.
+- Treat GUI automation as draft-only unless the user explicitly requests the final irreversible action.
+- For daily artifacts, check the dated directory or filename first. If today's artifact is absent, build it immediately; otherwise keep reruns idempotent.
+- Updating a plist does not reload an already running job. Do not run `launchctl bootstrap` or `bootout` without explicit approval.
+
 ## Validation
 
-- Shell: `bash -n path/to/script.sh`
+- Shell: `zsh -n path/to/script.sh`
 - Python: `python -m py_compile path/to/script.py`
 - AppleScript: `osacompile -o /tmp/notchwow-check.scpt path/to/script.applescript`
 - launchd: `plutil -lint path/to/com.notchwow.task.plist`
+
+After a broad automation change, also run:
+
+```bash
+/bin/zsh ~/keyoti/shs/workspace-scripts/keyoti-doctor.sh
+```
